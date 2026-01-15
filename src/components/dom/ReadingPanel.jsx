@@ -459,6 +459,11 @@ export function ReadingPanel() {
     setAnswer('')
 
     try {
+      let recordId = ''
+      try {
+        recordId = localStorage.getItem('omen_visit_id') || ''
+      } catch (err) {}
+
       const res = await fetch(READING_ENDPOINT, {
         method: 'POST',
         headers: {
@@ -467,6 +472,7 @@ export function ReadingPanel() {
         body: JSON.stringify({
           question: trimmed,
           cards: chosenNames,
+          recordId: recordId || undefined,
         }),
       })
 
@@ -622,17 +628,32 @@ export function ReadingPanel() {
   const isFeedbackSuccess = feedbackStatus === 'success'
   const feedbackButtonLabel = isFeedbackSuccess ? '已提交' : isSubmittingFeedback ? '提交中…' : '提交反馈'
 
+  // Loading状态下的文字渐显动画
+  const LoadingButton = () => (
+    <span style={{ animation: 'textFadeIn 0.8s ease-in-out infinite alternate' }}>
+      解牌中<span style={{ animationDelay: '0.3s' }}>。</span>
+      <span style={{ animationDelay: '0.6s' }}>。</span>
+      <span style={{ animationDelay: '0.9s' }}>。</span>
+    </span>
+  )
+
   return (
-    <div
-      style={{
-        ...PANEL_STYLE.wrapper,
-        opacity: 1,
-        pointerEvents: 'auto',
-        transform: 'translateX(-50%) translateY(0)',
-        transition: 'all 500ms ease',
-      }}
-    >
-      <div style={PANEL_STYLE.panel}>
+    <>
+      <style>{`
+        @keyframes textFadeIn {
+          from { opacity: 0.3; }
+          to { opacity: 1; }
+        `}</style>
+      <div
+        style={{
+          ...PANEL_STYLE.wrapper,
+          opacity: 1,
+          pointerEvents: 'auto',
+          transform: 'translateX(-50%) translateY(0)',
+          transition: 'all 500ms ease',
+        }}
+      >
+        <div style={PANEL_STYLE.panel}>
         <div style={PANEL_STYLE.title}>解牌入口已成形</div>
         <div style={PANEL_STYLE.chips}>
           {chosenNames.map((name) => (
@@ -671,7 +692,7 @@ export function ReadingPanel() {
             onClick={handleSubmit}
             disabled={loading}
           >
-            {loading ? '解牌中…' : '开始解牌'}
+            {loading ? <LoadingButton /> : '开始解牌'}
           </button>
         </div>
         {error && <div style={PANEL_STYLE.error}>{error}</div>}
@@ -782,6 +803,7 @@ export function ReadingPanel() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   )
 }

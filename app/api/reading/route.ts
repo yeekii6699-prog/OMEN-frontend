@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { buildFields, updateRecord } from '@/lib/feishu'
 
 const API_URL = 'https://ai.kaiho.cc/v1/chat/completions'
 const MODEL = 'gemini-3-pro-preview'
@@ -13,11 +14,19 @@ const SYSTEM_PROMPT = [
   '避免额外的小标题或结尾客套。',
 ].join('\n')
 
+const formatQuestionWithCards = (question: string, cards: string[]) => {
+  if (!cards.length) return question
+  return `${question}\n卡牌：${cards.join('、')}`
+}
+
 export async function POST(request: Request) {
   try {
     const payload = await request.json()
     const question = String(payload?.question || '').trim()
-    const cards = Array.isArray(payload?.cards) ? payload.cards.filter(Boolean) : []
+    const cards = Array.isArray(payload?.cards)
+      ? payload.cards.map((card: unknown) => String(card).trim()).filter(Boolean)
+      : []
+    const recordId = typeof payload?.recordId === 'string' ? payload.recordId.trim() : ''
 
     if (!question || cards.length < 3) {
       return NextResponse.json({ error: '问题或卡牌信息不完整。' }, { status: 400 })
@@ -56,6 +65,20 @@ export async function POST(request: Request) {
     }
 
     const content = data?.choices?.[0]?.message?.content?.trim() || ''
+    if (recordId) {
+      const fields = buildFields({
+        question: formatQuestionWithCards(question, cards),
+        reading: content,
+      })
+      if (Object.keys(fields).length) {
+        try {
+          await updateRecord(recordId, fields)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Failed to update reading.'
+          console.error('[feishu][reading]', message)
+        }
+      }
+    }
     return NextResponse.json({ content })
   } catch (error) {
     return NextResponse.json({ error: '请求失败，请稍后再试。' }, { status: 500 })

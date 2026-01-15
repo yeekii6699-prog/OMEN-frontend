@@ -70,9 +70,16 @@ const useShardTexture = () => {
   const [texture] = useState(() => {
     if (!shardTextureCache) {
       const loader = new THREE.TextureLoader()
-      shardTextureCache = loader.load('/img/Pback.png')
-      shardTextureCache.colorSpace = THREE.SRGBColorSpace
-      shardTextureCache.needsUpdate = true
+      shardTextureCache = loader.load(
+        'https://tarot-1378447783.cos.ap-guangzhou.myqcloud.com/web_pictrue/Pback.jpg',
+        (loaded) => {
+          loaded.colorSpace = THREE.SRGBColorSpace
+        },
+        undefined,
+        (error) => {
+          console.warn('[texture] Failed to load shard texture.', error)
+        }
+      )
     }
     return shardTextureCache
   })

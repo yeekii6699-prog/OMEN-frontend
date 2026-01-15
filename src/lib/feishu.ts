@@ -64,6 +64,9 @@ const FIELD_FEEDBACK = '反馈'
 const FIELD_SCORE = '评分'
 const FIELD_IP = 'IP'
 const FIELD_ADDRESS = 'IP地址'
+const FIELD_LOCATION = '定位'
+const FIELD_QUESTION = '问题'
+const FIELD_READING = '解读'
 
 const getTenantToken = async () => {
   if (!APP_ID || !APP_SECRET) {
@@ -192,12 +195,18 @@ export const buildFields = (payload: {
   score?: number | null
   ip?: string
   address?: string
+  location?: string
+  question?: string
+  reading?: string
 }) => {
   const fields: Record<string, string | number> = {}
   if (payload.feedback) fields[FIELD_FEEDBACK] = payload.feedback
   if (typeof payload.score === 'number') fields[FIELD_SCORE] = String(payload.score)
   if (payload.ip) fields[FIELD_IP] = payload.ip
   if (payload.address) fields[FIELD_ADDRESS] = payload.address
+  if (payload.location) fields[FIELD_LOCATION] = payload.location
+  if (payload.question) fields[FIELD_QUESTION] = payload.question
+  if (payload.reading) fields[FIELD_READING] = payload.reading
   return fields
 }
 

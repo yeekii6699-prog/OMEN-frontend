@@ -9,8 +9,10 @@ import { useGameStore } from '@/store/gameStore'
 // 整体缩放因子 - 修改这里即可调整六芒星大小
 const SCALE = 0.7
 const HOLD = {
-  duration: 3,
+  duration: 2,
   scaleBoost: 0.18,
+  spinAccel: 6,
+  spinMax: 10,
 }
 const FLASH = {
   duration: 0.45,
@@ -55,6 +57,7 @@ export function PortalHexagram() {
     triggered: false,
     flashStart: 0,
     warpAt: 0,
+    spinBoost: 0,
   })
 
   // 兼容性处理：防止 store 还没加载时报错
@@ -115,7 +118,17 @@ export function PortalHexagram() {
       }
     }
 
-    const speed = hovered || holdProgress > 0 ? 3.0 : 1.0
+    if (holdRef.current.active) {
+      holdRef.current.spinBoost = Math.min(
+        HOLD.spinMax,
+        holdRef.current.spinBoost + HOLD.spinAccel * delta
+      )
+    } else if (holdRef.current.spinBoost > 0) {
+      holdRef.current.spinBoost = THREE.MathUtils.damp(holdRef.current.spinBoost, 0, 6, delta)
+    }
+
+    const baseSpeed = hovered || holdProgress > 0 ? 3.0 : 1.0
+    const speed = baseSpeed + holdRef.current.spinBoost
 
     if (groupRef.current) {
       // 整体呼吸与摇摆
@@ -203,6 +216,7 @@ export function PortalHexagram() {
     holdRef.current.triggered = false
     holdRef.current.start = performance.now()
     holdRef.current.progress = 0
+    holdRef.current.spinBoost = 0
     if (e.target?.setPointerCapture) e.target.setPointerCapture(e.pointerId)
   }
 

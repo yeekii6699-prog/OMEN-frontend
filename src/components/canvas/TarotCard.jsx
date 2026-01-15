@@ -23,9 +23,16 @@ function useBackTexture() {
   const [backTexture] = useState(() => {
     if (!backTextureCache) {
       const loader = new THREE.TextureLoader()
-      backTextureCache = loader.load('/img/Pback.png')
-      backTextureCache.colorSpace = THREE.SRGBColorSpace
-      backTextureCache.needsUpdate = true
+      backTextureCache = loader.load(
+        'https://tarot-1378447783.cos.ap-guangzhou.myqcloud.com/web_pictrue/Pback.jpg',
+        (texture) => {
+          texture.colorSpace = THREE.SRGBColorSpace
+        },
+        undefined,
+        (error) => {
+          console.warn('[texture] Failed to load card back.', error)
+        }
+      )
     }
     return backTextureCache
   })
