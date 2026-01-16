@@ -20,6 +20,8 @@ export type ReadingStep =
   | 'focus_card_2'
   | 'focus_card_3'
   | 'summary'
+  | 'awaiting_user_input'
+  | 'consultation_result'
 
 /**
  * 犹豫指标数据结构 - 采集用户输入行为特征

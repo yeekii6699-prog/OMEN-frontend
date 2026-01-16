@@ -20,7 +20,7 @@ export default function Head() {
       <meta name='description' content={description} />
       <meta
         name='keywords'
-        content='Software Engineer,Product Manager,Project Manager,Data Scientist,Computer Scientist'
+        content='塔罗,塔罗牌,塔罗占卜,塔罗解读,免费塔罗,在线塔罗,塔罗测试,星座塔罗,神秘学,六芒星, tarot, tarot reading, free tarot'
       />
       <meta name='robots' content='index,follow' />
       <meta name='distribution' content='web' />
@@ -30,24 +30,25 @@ export default function Head() {
       <meta property='og:title' content={title} />
       <meta property='og:type' content='site' />
       <meta property='og:url' content={url} />
-      <meta property='og:image' content={'/icons/share.png'} />
+      <meta property='og:image' content={'/icons/logo.ico'} />
       <meta property='og:site_name' content={title} />
       <meta property='og:description' content={description} />
 
-      <link rel='apple-touch-icon' href='/icons/apple-touch-icon.png' />
-      <link rel='apple-touch-icon' sizes='16x16' href='/icons/favicon-16x16.png' />
-      <link rel='apple-touch-icon' sizes='32x32' href='/icons/favicon-32x32.png' />
-      <link rel='apple-touch-icon' sizes='180x180' href='/icons/apple-touch-icon.png' />
+      <link rel='icon' href='/icons/logo.ico' sizes='any' />
+      <link rel='icon' href='/icons/favicon-32x32.png' type='image/png' sizes='32x32' />
+      <link rel='icon' href='/icons/favicon-16x16.png' type='image/png' sizes='16x16' />
+      <link rel='apple-touch-icon' href='/icons/apple-touch-icon.png' sizes='180x180' />
       <link rel='manifest' href='/manifest.json' />
       <link rel='mask-icon' color='#000000' href='/icons/safari-pinned-tab.svg' />
-      <link rel='apple-touch-startup-image' href='/startup.png' />
+
+      {/* Twitter Share Image */}
+      <meta name='twitter:image' content={'/icons/logo.ico'} />
 
       {/* Meta Tags for HTML pages on Mobile */}
       {/* <meta name="format-detection" content="telephone=yes"/>
         <meta name="HandheldFriendly" content="true"/>  */}
       <meta name='viewport' content='width=device-width, minimum-scale=1, initial-scale=1.0' />
       <meta name='theme-color' content='#000' />
-      <link rel='shortcut icon' href='/icons/apple-touch-icon.png' />
 
       {/* 
       Twitter Summary card

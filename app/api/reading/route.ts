@@ -8,6 +8,8 @@ const SYSTEM_PROMPT = [
   '不需要解释牌阵或位置含义，只逐张解读三张牌。',
   '你是一位专业塔罗解读师，风格温柔、清晰、有边界感。',
   '请根据用户问题与三张牌的中文名进行解读，避免绝对化与宿命论。',
+  '在行动建议之后，追加一行反问，格式严格为：反问：<一句话问题>。',
+  '反问必须基于牌面矛盾点，简短直击潜意识。',
   '请严格输出三段，并使用 Markdown 二级标题：',
   '## 总体解读',
   '## 单牌解读',
@@ -16,9 +18,34 @@ const SYSTEM_PROMPT = [
   '避免额外的小标题或结尾客套。',
 ].join('\n')
 
+const CONSULTATION_PROMPT = [
+  '你是一位专业而温柔的咨询师，擅长把塔罗解读转化为可落地的安抚与建议。',
+  '请结合先前的牌面解读与用户的新回答，给出最终的建议或治愈性话语。',
+  '不要重新解读三张牌，不要输出标题或列表。',
+  '控制在 2-4 段内，语气温和、具体、有边界感。',
+].join('\n')
+
 const formatQuestionWithCards = (question: string, cards: string[]) => {
   if (!cards.length) return question
   return `${question}\n卡牌：${cards.join('、')}`
+}
+
+const getLastUserMessage = (
+  messages: { role: 'user' | 'assistant' | 'system'; content: string }[]
+) => {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    if (messages[index].role === 'user') {
+      return messages[index].content
+    }
+  }
+  return ''
+}
+
+const formatDeepContent = (reply: string, response: string) => {
+  const blocks = []
+  if (reply) blocks.push(`用户回答：${reply}`)
+  if (response) blocks.push(`咨询师回声：${response}`)
+  return blocks.join('\n\n')
 }
 
 export async function POST(request: Request) {
@@ -28,9 +55,21 @@ export async function POST(request: Request) {
     const cards = Array.isArray(payload?.cards)
       ? payload.cards.map((card: unknown) => String(card).trim()).filter(Boolean)
       : []
+    const rawMessages = Array.isArray(payload?.messages) ? payload.messages : []
+    const messages = rawMessages
+      .map((message: any) => {
+        const role = message?.role
+        if (role !== 'user' && role !== 'assistant' && role !== 'system') return null
+        const content = String(message?.content || '').trim()
+        if (!content) return null
+        return { role, content }
+      })
+      .filter((message): message is { role: 'user' | 'assistant' | 'system'; content: string } => !!message)
     const recordId = typeof payload?.recordId === 'string' ? payload.recordId.trim() : ''
+    const isConsultation = messages.length > 0
+    const consultationReply = isConsultation ? getLastUserMessage(messages) : ''
 
-    if (!question || cards.length < 3) {
+    if (!isConsultation && (!question || cards.length < 3)) {
       return NextResponse.json({ error: '问题或卡牌信息不完整。' }, { status: 400 })
     }
 
@@ -38,6 +77,16 @@ export async function POST(request: Request) {
     if (!apiKey) {
       return NextResponse.json({ error: '服务未配置密钥。' }, { status: 500 })
     }
+
+    const requestMessages = isConsultation
+      ? [{ role: 'system', content: CONSULTATION_PROMPT }, ...messages]
+      : [
+          { role: 'system', content: SYSTEM_PROMPT },
+          {
+            role: 'user',
+            content: `问题：${question}\n抽到的牌：${cards.join('、')}`,
+          },
+        ]
 
     const response = await fetch(API_URL, {
       method: 'POST',
@@ -50,13 +99,7 @@ export async function POST(request: Request) {
         model: MODEL,
         temperature: 0.7,
         stream: true,
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          {
-            role: 'user',
-            content: `问题：${question}\n抽到的牌：${cards.join('、')}`,
-          },
-        ],
+        messages: requestMessages,
       }),
     })
 
@@ -79,19 +122,35 @@ export async function POST(request: Request) {
     let buffer = ''
     let content = ''
     let finalized = false
+    const shouldPersistReading = !isConsultation && !!recordId
+    const shouldPersistDeep = isConsultation && !!recordId
     const finalize = () => {
       if (finalized) return
       finalized = true
-      if (!recordId) return
-      const fields = buildFields({
-        question: formatQuestionWithCards(question, cards),
-        reading: content,
-      })
-      if (!Object.keys(fields).length) return
-      updateRecord(recordId, fields).catch((error) => {
-        const message = error instanceof Error ? error.message : 'Failed to update reading.'
-        console.error('[feishu][reading]', message)
-      })
+      if (shouldPersistReading) {
+        const fields = buildFields({
+          question: formatQuestionWithCards(question, cards),
+          reading: content,
+        })
+        if (Object.keys(fields).length) {
+          updateRecord(recordId, fields).catch((error) => {
+            const message = error instanceof Error ? error.message : 'Failed to update reading.'
+            console.error('[feishu][reading]', message)
+          })
+        }
+        return
+      }
+      if (shouldPersistDeep) {
+        const deepContent = formatDeepContent(consultationReply, content)
+        const fields = buildFields({
+          deep: deepContent,
+        })
+        if (!Object.keys(fields).length) return
+        updateRecord(recordId, fields).catch((error) => {
+          const message = error instanceof Error ? error.message : 'Failed to update deep.'
+          console.error('[feishu][deep]', message)
+        })
+      }
     }
 
     const stream = new ReadableStream({

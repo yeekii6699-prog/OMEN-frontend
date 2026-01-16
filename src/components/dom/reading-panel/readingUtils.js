@@ -1,5 +1,12 @@
 export const SECTION_LABELS = ['总体解读', '单牌解读', '行动建议']
-export const READING_STEPS = ['focus_card_1', 'focus_card_2', 'focus_card_3', 'summary']
+export const READING_STEPS = [
+  'focus_card_1',
+  'focus_card_2',
+  'focus_card_3',
+  'summary',
+  'awaiting_user_input',
+  'consultation_result',
+]
 export const FOCUS_STEP_INDEX = {
   focus_card_1: 0,
   focus_card_2: 1,
@@ -107,6 +114,22 @@ export const getNextStep = (step) => {
   const index = READING_STEPS.indexOf(step)
   if (index === -1) return 'focus_card_1'
   return READING_STEPS[index + 1] || 'idle'
+}
+
+export const extractFollowUpQuestion = (text) => {
+  if (!text) return ''
+  const regex = /(?:^|\n)\s*(反问|追问)\s*[:：]\s*([^\n]+?)(?=\n|$)/g
+  let match
+  let lastQuestion = ''
+  while ((match = regex.exec(text))) {
+    lastQuestion = match[2]?.trim() || ''
+  }
+  return lastQuestion
+}
+
+export const stripFollowUpQuestion = (text) => {
+  if (!text) return ''
+  return text.replace(/(?:^|\n)\s*(反问|追问)\s*[:：]\s*[^\n]*\n?/g, '\n').trim()
 }
 
 const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')

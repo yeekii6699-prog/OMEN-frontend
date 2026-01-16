@@ -72,10 +72,10 @@ const createSeededRandom = (seed) => {
   }
 }
 
-const getLayout = (isMobile) => {
+const getLayout = (isMobile, compactChosen) => {
   const ringScale = isMobile ? 0.82 : 1
   const ringCenter = [RING_CENTER[0], isMobile ? -2.6 : RING_CENTER[1], RING_CENTER[2]]
-  const chosenPositions = getChosenPositions(isMobile)
+  const chosenPositions = getChosenPositions(isMobile, { compact: compactChosen })
 
   return {
     ringScale,
@@ -140,6 +140,7 @@ export function StarRing() {
   const setReadingReady = useGameStore((state) => state.setReadingReady) || (() => {})
   const cardOrientations = useGameStore((state) => state.cardOrientations) || {}
   const setCardOrientation = useGameStore((state) => state.setCardOrientation) || (() => {})
+  const readingStep = useGameStore((state) => state.readingStep) || 'idle'
   const sessionId = useGameStore((state) => state.sessionId) || 0
   const sessionRef = useRef(sessionId)
   const reassembleRef = useRef({
@@ -158,7 +159,11 @@ export function StarRing() {
     floatingCards.every((card) => revealedIndices.includes(card.key))
   const shouldBurst = isBurstOrReveal || allChosenRevealed
   const isMobile = size.width < MOBILE_BREAKPOINT
-  const layout = useMemo(() => getLayout(isMobile), [isMobile])
+  const isSummaryStep =
+    readingStep === 'summary' ||
+    readingStep === 'awaiting_user_input' ||
+    readingStep === 'consultation_result'
+  const layout = useMemo(() => getLayout(isMobile, isSummaryStep), [isMobile, isSummaryStep])
 
   useFrame((_state, delta) => {
     const group = groupRef.current

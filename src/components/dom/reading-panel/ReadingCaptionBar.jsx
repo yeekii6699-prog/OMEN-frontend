@@ -13,8 +13,15 @@ export function ReadingCaptionBar({
   onNext,
   canPrev,
   isStepDisabled,
+  isPrevDisabled = false,
+  isNextDisabled,
   nextLabel,
+  showControls = true,
+  showNext = true,
 }) {
+  const prevDisabled = !canPrev || isPrevDisabled
+  const nextDisabled = typeof isNextDisabled === 'boolean' ? isNextDisabled : isStepDisabled
+
   return (
     <div style={wrapperStyle}>
       <div style={PANEL_STYLE.captionPanel}>
@@ -31,34 +38,38 @@ export function ReadingCaptionBar({
             <span>{placeholder}</span>
           )}
         </div>
-        <div style={PANEL_STYLE.captionFooter}>
-          <button
-            type="button"
-            style={{
-              ...PANEL_STYLE.secondaryButton,
-              padding: '8px 14px',
-              opacity: !canPrev || isStepDisabled ? 0.45 : 1,
-              cursor: !canPrev || isStepDisabled ? 'not-allowed' : 'pointer',
-            }}
-            onClick={onPrev}
-            disabled={!canPrev || isStepDisabled}
-          >
-            上一张
-          </button>
-          <button
-            type="button"
-            style={{
-              ...PANEL_STYLE.button,
-              padding: '8px 16px',
-              opacity: isStepDisabled ? 0.7 : 1,
-              cursor: isStepDisabled ? 'not-allowed' : 'pointer',
-            }}
-            onClick={onNext}
-            disabled={isStepDisabled}
-          >
-            {nextLabel}
-          </button>
-        </div>
+        {showControls && (
+          <div style={PANEL_STYLE.captionFooter}>
+            <button
+              type="button"
+              style={{
+                ...PANEL_STYLE.secondaryButton,
+                padding: '8px 14px',
+                opacity: prevDisabled ? 0.45 : 1,
+                cursor: prevDisabled ? 'not-allowed' : 'pointer',
+              }}
+              onClick={onPrev}
+              disabled={prevDisabled}
+            >
+              上一张
+            </button>
+            {showNext && (
+              <button
+                type="button"
+                style={{
+                  ...PANEL_STYLE.button,
+                  padding: '8px 16px',
+                  opacity: nextDisabled ? 0.7 : 1,
+                  cursor: nextDisabled ? 'not-allowed' : 'pointer',
+                }}
+                onClick={onNext}
+                disabled={nextDisabled}
+              >
+                {nextLabel}
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   )

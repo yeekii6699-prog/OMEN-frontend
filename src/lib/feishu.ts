@@ -62,11 +62,13 @@ const wikiTokenCache = new Map<string, string>()
 
 const FIELD_FEEDBACK = '反馈'
 const FIELD_SCORE = '评分'
+const FIELD_QUICK_OPTION = '快速评价'
 const FIELD_IP = 'IP'
 const FIELD_ADDRESS = 'IP地址'
 const FIELD_LOCATION = '定位'
 const FIELD_QUESTION = '问题'
 const FIELD_READING = '解读'
+const FIELD_DEEP = '深入'
 
 const getTenantToken = async () => {
   if (!APP_ID || !APP_SECRET) {
@@ -193,20 +195,24 @@ export const resolveClientInfo = async (request: Request) => {
 export const buildFields = (payload: {
   feedback?: string
   score?: number | null
+  quickOption?: string | null
   ip?: string
   address?: string
   location?: string
   question?: string
   reading?: string
+  deep?: string
 }) => {
   const fields: Record<string, string | number> = {}
   if (payload.feedback) fields[FIELD_FEEDBACK] = payload.feedback
   if (typeof payload.score === 'number') fields[FIELD_SCORE] = String(payload.score)
+  if (payload.quickOption) fields[FIELD_QUICK_OPTION] = payload.quickOption
   if (payload.ip) fields[FIELD_IP] = payload.ip
   if (payload.address) fields[FIELD_ADDRESS] = payload.address
   if (payload.location) fields[FIELD_LOCATION] = payload.location
   if (payload.question) fields[FIELD_QUESTION] = payload.question
   if (payload.reading) fields[FIELD_READING] = payload.reading
+  if (payload.deep) fields[FIELD_DEEP] = payload.deep
   return fields
 }
 

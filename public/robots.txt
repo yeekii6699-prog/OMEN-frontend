@@ -1,0 +1,6 @@
+# OMEN塔罗 - Robots.txt
+User-agent: *
+Allow: /
+
+# Sitemap
+Sitemap: https://omen-tarot.vercel.app/sitemap.xml

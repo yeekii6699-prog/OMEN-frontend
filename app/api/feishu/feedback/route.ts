@@ -7,13 +7,17 @@ export async function POST(request: Request) {
     const feedback = typeof payload?.feedback === 'string' ? payload.feedback.trim() : ''
     const score =
       typeof payload?.score === 'number' && Number.isFinite(payload.score) ? payload.score : null
+    const quickOption =
+      typeof payload?.quickOption === 'string' && payload.quickOption.trim()
+        ? payload.quickOption.trim()
+        : null
     const recordId = typeof payload?.recordId === 'string' ? payload.recordId.trim() : ''
     if (!recordId) {
       return NextResponse.json({ error: 'Missing recordId.' }, { status: 400 })
     }
 
     const { ip, address } = await resolveClientInfo(request)
-    const fields = buildFields({ feedback, score, ip, address })
+    const fields = buildFields({ feedback, score, quickOption, ip, address })
 
     if (!Object.keys(fields).length) {
       return NextResponse.json({ error: 'No data provided.' }, { status: 400 })

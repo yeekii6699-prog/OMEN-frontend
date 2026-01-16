@@ -49,8 +49,8 @@ export function CameraRig() {
   const deskPos = new THREE.Vector3(0, isMobile ? 0.5 : 0, isMobile ? 26 : 22) // 选牌位
   const ringCenter = new THREE.Vector3(0, isMobile ? -2.6 : -2, 0)
   const sessionLookAt = new THREE.Vector3(0, 0, isMobile ? 16 : 14)
-  const summaryPos = new THREE.Vector3(0, isMobile ? 2.4 : 2, isMobile ? 34 : 30)
-  const summaryLookAt = new THREE.Vector3(0, isMobile ? 0.6 : 0.4, isMobile ? 16 : 14)
+  const summaryPos = new THREE.Vector3(0, isMobile ? 1.8 : 1.4, isMobile ? 25 : 22)
+  const summaryLookAt = new THREE.Vector3(0, isMobile ? 0 : -0.2, isMobile ? 16 : 14)
 
   const focusOffset = useMemo(
     () => ({
@@ -103,6 +103,10 @@ export function CameraRig() {
     let targetPos
     let targetLookAt
     const isReadingFocus = phase === 'SESSION' && readingReady && readingStep !== 'idle'
+    const isSummaryStep =
+      readingStep === 'summary' ||
+      readingStep === 'awaiting_user_input' ||
+      readingStep === 'consultation_result'
     const transitionActive = focusTransitionRef.current.active
     const posSpeed = transitionActive
       ? isMobile ? 2.2 : 2.4
@@ -139,7 +143,7 @@ export function CameraRig() {
 
     if (phase === 'SESSION') {
       if (isReadingFocus) {
-        if (readingStep === 'summary') {
+        if (isSummaryStep) {
           targetPos = summaryPos
           targetLookAt = summaryLookAt
         } else {
