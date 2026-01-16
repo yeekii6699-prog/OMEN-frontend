@@ -45,9 +45,31 @@ const PORTAL_SPIN = {
   damping: 6,
 }
 
+const REASSEMBLE = {
+  duration: 1.7,
+  minRadius: 3.4,
+  maxRadius: 7.2,
+  minLift: -1.6,
+  maxLift: 2.6,
+  minDepth: -2.4,
+  maxDepth: 3.2,
+  minScale: 0.35,
+}
+
 const DRAG_PLANE = {
   width: 40,
   height: 20,
+}
+
+const clamp01 = (value) => Math.min(1, Math.max(0, value))
+const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3)
+
+const createSeededRandom = (seed) => {
+  let s = (seed * 9301 + 49297) % 233280
+  return () => {
+    s = (s * 9301 + 49297) % 233280
+    return s / 233280
+  }
 }
 
 const getLayout = (isMobile) => {
@@ -111,6 +133,7 @@ export function StarRing() {
   const [inputActive, setInputActive] = useState(false)
   const phase = useGameStore((state) => state.phase) || 'PORTAL'
   const portalHolding = useGameStore((state) => state.portalHolding) || false
+  const triggerPortalPulse = useGameStore((state) => state.triggerPortalPulse) || (() => {})
   const revealedIndices = useGameStore((state) => state.revealedIndices) || []
   const revealCard = useGameStore((state) => state.revealCard) || (() => {})
   const setSelectedIndices = useGameStore((state) => state.setSelectedIndices) || (() => {})
@@ -119,6 +142,13 @@ export function StarRing() {
   const setCardOrientation = useGameStore((state) => state.setCardOrientation) || (() => {})
   const sessionId = useGameStore((state) => state.sessionId) || 0
   const sessionRef = useRef(sessionId)
+  const reassembleRef = useRef({
+    active: false,
+    start: 0,
+    duration: REASSEMBLE.duration,
+    progress: 1,
+    pulsed: false,
+  })
   const isBurstOrReveal = phase === 'BURST' || phase === 'REVEAL'
   const isReveal = phase === 'REVEAL'
   const isSession = phase === 'SESSION'
@@ -133,6 +163,22 @@ export function StarRing() {
   useFrame((_state, delta) => {
     const group = groupRef.current
     if (!group) return
+
+    const reassemble = reassembleRef.current
+    if (reassemble.active) {
+      if (reassemble.start === 0) {
+        reassemble.start = _state.clock.elapsedTime
+        reassemble.duration = isMobile ? REASSEMBLE.duration - 0.2 : REASSEMBLE.duration
+      }
+      const elapsed = _state.clock.elapsedTime - reassemble.start
+      const progress = clamp01(elapsed / reassemble.duration)
+      reassemble.progress = progress
+      if (progress >= 1 && !reassemble.pulsed) {
+        reassemble.pulsed = true
+        reassemble.active = false
+        triggerPortalPulse()
+      }
+    }
 
     if (portalHolding) {
       portalSpinRef.current = Math.min(
@@ -149,7 +195,11 @@ export function StarRing() {
     }
 
     const isPaused =
-      dragStateRef.current.active || hoveredCardKey !== null || isBurstOrReveal || shouldBurst
+      dragStateRef.current.active ||
+      hoveredCardKey !== null ||
+      isBurstOrReveal ||
+      shouldBurst ||
+      reassembleRef.current.progress < 1
     if (!isPaused) {
       extraSpeedRef.current = THREE.MathUtils.damp(
         extraSpeedRef.current,
@@ -236,6 +286,16 @@ export function StarRing() {
     dragStateRef.current.active = false
     if (groupRef.current) {
       groupRef.current.rotation.y = 0
+    }
+    if (sessionId > 0) {
+      reassembleRef.current.active = true
+      reassembleRef.current.start = 0
+      reassembleRef.current.duration = REASSEMBLE.duration
+      reassembleRef.current.progress = 0
+      reassembleRef.current.pulsed = false
+    } else {
+      reassembleRef.current.active = false
+      reassembleRef.current.progress = 1
     }
   }, [sessionId])
 
@@ -367,6 +427,8 @@ export function StarRing() {
             isHovered={hoveredCardKey === card.key}
             isBursting={shouldBurst}
             canInteract={isSession && !shouldBurst}
+            reassembleRef={reassembleRef}
+            reassembleSeed={sessionId}
             onHover={handleCardHover}
             onUnhover={handleCardUnhover}
             onSelect={handleSelectCard}
@@ -402,6 +464,8 @@ function RingCard({
   isHovered,
   isBursting,
   canInteract,
+  reassembleRef,
+  reassembleSeed,
   onHover,
   onUnhover,
   onSelect,
@@ -413,6 +477,8 @@ function RingCard({
   const ringCenterVec = useMemo(() => new THREE.Vector3(...ringCenter), [ringCenter])
   const basePosition = useMemo(() => new THREE.Vector3(card.x, 0, card.z), [card.x, card.z])
   const baseRotation = useMemo(() => new THREE.Euler(-0.1, card.rotationY, 0), [card.rotationY])
+  const scatterRef = useRef(new THREE.Vector3())
+  const targetRef = useMemo(() => new THREE.Vector3(), [])
   const localPosition = useMemo(() => new THREE.Vector3(0, 0, 0), [])
   const localRotation = useMemo(() => new THREE.Euler(0, 0, 0), [])
   const cardPos = useMemo(() => new THREE.Vector3(), [])
@@ -421,26 +487,52 @@ function RingCard({
   const worldPosition = useMemo(() => new THREE.Vector3(), [])
   const tapRef = useRef({ id: null, x: 0, y: 0, pointerType: '' })
 
+  useEffect(() => {
+    const seed = (card.key + 1) * 97 + (reassembleSeed || 0) * 131
+    const rand = createSeededRandom(seed)
+    const angle = rand() * Math.PI * 2
+    const radius = THREE.MathUtils.lerp(REASSEMBLE.minRadius, REASSEMBLE.maxRadius, rand())
+    const lift = THREE.MathUtils.lerp(REASSEMBLE.minLift, REASSEMBLE.maxLift, rand())
+    const depth = THREE.MathUtils.lerp(REASSEMBLE.minDepth, REASSEMBLE.maxDepth, rand())
+    scatterRef.current.copy(basePosition).add(
+      new THREE.Vector3(
+        Math.cos(angle) * radius,
+        lift,
+        Math.sin(angle) * radius + depth
+      )
+    )
+  }, [card.key, basePosition, reassembleSeed])
+
   useFrame(({ clock }, delta) => {
     const group = groupRef.current
     if (!group || isBursting) return
 
     const time = clock.elapsedTime
-    const hoverActive = isHovered
+    const reassembleProgress = reassembleRef?.current?.progress ?? 1
+    const reassembleActive = reassembleProgress < 1
+    const hoverActive = isHovered && !reassembleActive
     const wobble = hoverActive ? Math.sin(time * HOVER.wobbleSpeed) * HOVER.wobbleAmplitude : 0
     const targetY = hoverActive ? HOVER.lift + wobble * 0.3 : 0
 
-    group.position.set(basePosition.x, basePosition.y + targetY, basePosition.z)
+    if (reassembleActive) {
+      const eased = easeOutCubic(reassembleProgress)
+      targetRef.set(basePosition.x, basePosition.y + targetY, basePosition.z)
+      group.position.copy(scatterRef.current).lerp(targetRef, eased)
+      group.scale.setScalar(THREE.MathUtils.lerp(REASSEMBLE.minScale, 1, eased))
+    } else {
+      group.position.set(basePosition.x, basePosition.y + targetY, basePosition.z)
+      group.scale.setScalar(1)
+    }
     group.rotation.set(
       baseRotation.x,
       baseRotation.y,
       THREE.MathUtils.damp(group.rotation.z, baseRotation.z + wobble, HOVER.returnDamping, delta)
     )
-    group.scale.setScalar(1)
   })
 
   const isSelectable = () => {
-    if (!groupRef.current || !canInteract || isBursting) return false
+    const reassembleProgress = reassembleRef?.current?.progress ?? 1
+    if (!groupRef.current || !canInteract || isBursting || reassembleProgress < 1) return false
     groupRef.current.getWorldPosition(cardPos)
     toCard.subVectors(cardPos, ringCenterVec).normalize()
     toCamera.subVectors(camera.position, ringCenterVec).normalize()

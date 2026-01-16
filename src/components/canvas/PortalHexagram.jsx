@@ -47,8 +47,12 @@ export function PortalHexagram() {
   const ringsRef = useRef(null)
   const particlesRef = useRef(null)
   const progressRingRef = useRef(null)
+  const ringOuterRef = useRef(null)
+  const ringWireRef = useRef(null)
+  const ringWashRef = useRef(null)
   const progressStateRef = useRef({ value: 0 })
   const shuffleAudioRef = useRef(null)
+  const pulseRef = useRef({ active: false, start: 0, duration: 0.9 })
 
   const [hovered, setHovered] = useState(false)
   const holdRef = useRef({
@@ -64,6 +68,7 @@ export function PortalHexagram() {
   // 兼容性处理：防止 store 还没加载时报错
   const setPhase = useGameStore((state) => state.setPhase) || (() => {})
   const setPortalHolding = useGameStore((state) => state.setPortalHolding) || (() => {})
+  const portalPulseId = useGameStore((state) => state.portalPulseId) || 0
 
   useCursor(hovered)
 
@@ -160,10 +165,17 @@ export function PortalHexagram() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!portalPulseId) return
+    pulseRef.current.active = true
+    pulseRef.current.start = performance.now()
+  }, [portalPulseId])
+
   useFrame((state, delta) => {
     const time = state.clock.elapsedTime
     let holdProgress = holdRef.current.progress
     let flash = 0
+    let pulse = 0
 
     if (holdRef.current.active && !holdRef.current.triggered) {
       const elapsed = (performance.now() - holdRef.current.start) / 1000
@@ -191,6 +203,21 @@ export function PortalHexagram() {
         holdRef.current.flashStart = 0
       }
     }
+
+    if (pulseRef.current.active) {
+      const pulseElapsed = (performance.now() - pulseRef.current.start) / 1000
+      const pulseProgress = THREE.MathUtils.clamp(
+        pulseElapsed / pulseRef.current.duration,
+        0,
+        1
+      )
+      pulse = Math.sin(pulseProgress * Math.PI)
+      if (pulseProgress >= 1) {
+        pulseRef.current.active = false
+      }
+    }
+
+    const pulseGlow = pulse * 0.85
 
     if (holdRef.current.triggered && holdRef.current.warpAt) {
       if (performance.now() >= holdRef.current.warpAt) {
@@ -227,15 +254,49 @@ export function PortalHexagram() {
     if (coreRef.current) {
       coreRef.current.rotation.x += delta * speed
       coreRef.current.rotation.z += delta * speed * 0.5
+      const material = coreRef.current.material
+      if (material && !Array.isArray(material)) {
+        material.emissiveIntensity = (hovered ? 2 : 1) + pulseGlow * 1.4
+        material.opacity = 0.9 + pulseGlow * 0.12
+      }
     }
 
     if (starRef1.current) starRef1.current.rotation.z += delta * 0.2 * speed
     if (starRef2.current) starRef2.current.rotation.z -= delta * 0.15 * speed
+    if (starRef1.current) starRef1.current.scale.setScalar(1 + pulseGlow * 0.08)
+    if (starRef2.current) starRef2.current.scale.setScalar(1 + pulseGlow * 0.08)
 
     if (ringsRef.current) {
       ringsRef.current.rotation.z -= delta * 0.05 * speed
       const scale = 1 + Math.sin(time * 3) * 0.02
-      ringsRef.current.scale.setScalar(scale)
+      ringsRef.current.scale.setScalar(scale + pulseGlow * 0.04)
+    }
+
+    if (ringOuterRef.current) {
+      const material = ringOuterRef.current.material
+      if (material && !Array.isArray(material)) {
+        material.opacity = THREE.MathUtils.clamp(
+          (hovered ? 0.6 : 0.3) + pulseGlow * 0.35,
+          0,
+          1
+        )
+      }
+    }
+    if (ringWireRef.current) {
+      const material = ringWireRef.current.material
+      if (material && !Array.isArray(material)) {
+        material.opacity = THREE.MathUtils.clamp(0.4 + pulseGlow * 0.3, 0, 1)
+      }
+    }
+    if (ringWashRef.current) {
+      const material = ringWashRef.current.material
+      if (material && !Array.isArray(material)) {
+        material.opacity = THREE.MathUtils.clamp(
+          (hovered ? 0.2 : 0.05) + pulseGlow * 0.2,
+          0,
+          1
+        )
+      }
     }
 
     if (particlesRef.current) {
@@ -265,7 +326,7 @@ export function PortalHexagram() {
       const material = ring.material
       if (material && !Array.isArray(material)) {
         material.opacity = THREE.MathUtils.clamp(
-          0.2 + progress * 0.8 + flash * FLASH.intensity,
+          0.2 + progress * 0.8 + flash * FLASH.intensity + pulseGlow * 0.3,
           0,
           1
         )
@@ -362,15 +423,15 @@ export function PortalHexagram() {
 
           {/* --- 符文环 --- */}
           <group ref={ringsRef}>
-            <mesh rotation={[0, 0, 0]}>
+            <mesh ref={ringOuterRef} rotation={[0, 0, 0]}>
               <ringGeometry args={[2.8 * SCALE, 2.85 * SCALE, 64]} />
               <meshBasicMaterial color="#ffd700" transparent opacity={hovered ? 0.6 : 0.3} blending={THREE.AdditiveBlending} side={THREE.DoubleSide} />
             </mesh>
-            <mesh rotation={[0, 0, 1]}>
+            <mesh ref={ringWireRef} rotation={[0, 0, 1]}>
               <ringGeometry args={[2.6 * SCALE, 2.7 * SCALE, 32, 1, 0, Math.PI * 2]} />
               <meshBasicMaterial color="#c084fc" wireframe wireframeLinewidth={2} transparent opacity={0.4} blending={THREE.AdditiveBlending} />
             </mesh>
-            <mesh position={[0, 0, -0.1 * SCALE]}>
+            <mesh ref={ringWashRef} position={[0, 0, -0.1 * SCALE]}>
               <ringGeometry args={[0, 3.5 * SCALE, 64]} />
               <meshBasicMaterial color="#4b0082" transparent opacity={hovered ? 0.2 : 0.05} blending={THREE.AdditiveBlending} depthWrite={false} />
             </mesh>

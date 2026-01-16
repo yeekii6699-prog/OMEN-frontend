@@ -69,6 +69,8 @@ interface GameState {
   cardOrientations: Record<number, CardOrientation>
   /** 法阵长按状态 */
   portalHolding: boolean
+  /** 法阵点亮脉冲 */
+  portalPulseId: number
   /** 解牌输入是否就绪 */
   readingReady: boolean
   /** 沉浸式解读步骤 */
@@ -89,6 +91,8 @@ interface GameState {
   setCardOrientation: (index: number, orientation: CardOrientation) => void
   /** 设置法阵长按状态 */
   setPortalHolding: (holding: boolean) => void
+  /** 触发法阵点亮 */
+  triggerPortalPulse: () => void
   /** 设置解牌输入状态 */
   setReadingReady: (ready: boolean) => void
   /** 设置解读步骤 */
@@ -105,6 +109,7 @@ const initialState = {
   selectedIndices: [],
   cardOrientations: {},
   portalHolding: false,
+  portalPulseId: 0,
   readingReady: false,
   readingStep: 'idle' as ReadingStep,
   sessionId: 0,
@@ -153,6 +158,11 @@ export const useGameStore = create<GameState>((set) => ({
     })),
 
   setPortalHolding: (holding) => set({ portalHolding: holding }),
+
+  triggerPortalPulse: () =>
+    set((state) => ({
+      portalPulseId: state.portalPulseId + 1,
+    })),
 
   setReadingReady: (ready) => set({ readingReady: ready }),
 
