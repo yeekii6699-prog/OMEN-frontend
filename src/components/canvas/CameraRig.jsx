@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useGameStore } from '@/store/gameStore'
@@ -18,10 +18,36 @@ export function CameraRig() {
   // 兼容性处理：防止 store 未加载时报错
   const phase = useGameStore((state) => state.phase) || 'PORTAL'
   const setPhase = useGameStore((state) => state.setPhase) || (() => {})
+  const warpRef = useRef({
+    active: false,
+    completed: false,
+    start: 0,
+    startAngle: 0,
+    startRadius: 0,
+    endRadius: 0,
+    startY: 0,
+  })
+  const warpPosRef = useRef(new THREE.Vector3())
+  const warpLookRef = useRef(new THREE.Vector3())
 
   // 摄像机位置定义
   const startPos = new THREE.Vector3(0, isMobile ? 6 : 5, isMobile ? 42 : 35)  // 入口俯视
   const deskPos = new THREE.Vector3(0, isMobile ? 0.5 : 0, isMobile ? 26 : 22) // 选牌位
+  const ringCenter = new THREE.Vector3(0, isMobile ? -2.6 : -2, 0)
+  const sessionLookAt = new THREE.Vector3(0, 0, isMobile ? 16 : 14)
+
+  const WARP = {
+    orbitDuration: 2.6,
+    lift: 0.6,
+    lookAtLift: 0.4,
+  }
+
+  useEffect(() => {
+    if (phase !== 'WARP') {
+      warpRef.current.active = false
+      warpRef.current.completed = false
+    }
+  }, [phase])
 
   useFrame((state, delta) => {
     let targetPos
@@ -61,10 +87,48 @@ export function CameraRig() {
         isMobile ? 16 : 14
       )
     } else if (phase === 'WARP') {
-      targetPos = deskPos
-      targetLookAt = new THREE.Vector3(0, 0, isMobile ? 16 : 14)
+      const warp = warpRef.current
+      if (!warp.active) {
+        warp.active = true
+        warp.completed = false
+        warp.start = state.clock.elapsedTime
+        warp.startAngle = Math.atan2(
+          camera.position.z - ringCenter.z,
+          camera.position.x - ringCenter.x
+        )
+        warp.startRadius = Math.hypot(
+          camera.position.x - ringCenter.x,
+          camera.position.z - ringCenter.z
+        )
+        warp.endRadius = Math.hypot(
+          deskPos.x - ringCenter.x,
+          deskPos.z - ringCenter.z
+        )
+        warp.startY = camera.position.y
+      }
 
-      if (camera.position.distanceTo(deskPos) < 0.5) {
+      const elapsed = state.clock.elapsedTime - warp.start
+      const raw = THREE.MathUtils.clamp(elapsed / WARP.orbitDuration, 0, 1)
+      const eased = THREE.MathUtils.smoothstep(raw, 0, 1)
+      const angle = warp.startAngle + raw * Math.PI * 2
+      const radius = THREE.MathUtils.lerp(warp.startRadius, warp.endRadius, eased)
+      const y = THREE.MathUtils.lerp(warp.startY, deskPos.y, eased) + Math.sin(raw * Math.PI) * WARP.lift
+
+      warpPosRef.current.set(
+        ringCenter.x + Math.cos(angle) * radius,
+        y,
+        ringCenter.z + Math.sin(angle) * radius
+      )
+      targetPos = warpPosRef.current
+
+      warpLookRef.current
+        .copy(ringCenter)
+        .setY(ringCenter.y + WARP.lookAtLift)
+        .lerp(sessionLookAt, eased)
+      targetLookAt = warpLookRef.current
+
+      if (!warp.completed && raw >= 1) {
+        warp.completed = true
         setPhase('SESSION')
       }
     } else {
@@ -72,7 +136,11 @@ export function CameraRig() {
       targetLookAt = new THREE.Vector3(0, 0, 0)
     }
 
-    camera.position.lerp(targetPos, posLerp)
+    if (phase === 'WARP') {
+      camera.position.lerp(targetPos, 1)
+    } else {
+      camera.position.lerp(targetPos, posLerp)
+    }
     targetRef.current.lerp(targetLookAt, lookLerp)
     camera.lookAt(targetRef.current)
   })

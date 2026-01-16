@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { buildFields, createRecord, resolveClientInfo } from '@/lib/feishu'
+import { buildFields, resolveClientInfo, updateRecord } from '@/lib/feishu'
 
 export async function POST(request: Request) {
   try {
@@ -7,6 +7,11 @@ export async function POST(request: Request) {
     const feedback = typeof payload?.feedback === 'string' ? payload.feedback.trim() : ''
     const score =
       typeof payload?.score === 'number' && Number.isFinite(payload.score) ? payload.score : null
+    const recordId = typeof payload?.recordId === 'string' ? payload.recordId.trim() : ''
+    if (!recordId) {
+      return NextResponse.json({ error: 'Missing recordId.' }, { status: 400 })
+    }
+
     const { ip, address } = await resolveClientInfo(request)
     const fields = buildFields({ feedback, score, ip, address })
 
@@ -14,7 +19,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No data provided.' }, { status: 400 })
     }
 
-    const savedId = await createRecord(fields)
+    const savedId = await updateRecord(recordId, fields)
     return NextResponse.json({ recordId: savedId })
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to submit feedback.'

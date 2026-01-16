@@ -531,12 +531,18 @@ export function ReadingPanel() {
     setFeedbackStatus('submitting')
     setFeedbackError('')
 
+    let recordId = ''
+    try {
+      recordId = localStorage.getItem('omen_visit_id') || ''
+    } catch (err) {}
+
     fetch('/api/feishu/feedback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         score: feedbackScore || null,
         feedback: feedbackText.trim(),
+        recordId: recordId || undefined,
       }),
     })
       .then(async (res) => {

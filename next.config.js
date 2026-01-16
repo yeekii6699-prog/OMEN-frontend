@@ -2,6 +2,8 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
   enabled: process.env.ANALYZE === 'true',
 })
 
+const OSS_URL = 'https://tarot-1378447783.cos.ap-guangzhou.myqcloud.com'
+
 /**
  * A fork of 'next-pwa' that has app directory support
  * @see https://github.com/shadowwalker/next-pwa/issues/424#issuecomment-1332258575
@@ -9,6 +11,7 @@ const withBundleAnalyzer = require('@next/bundle-analyzer')({
 const withPWA = require('@ducanh2912/next-pwa').default({
   dest: 'public',
   disable: process.env.NODE_ENV === 'development',
+  cleanupOutdatedCaches: true,
 })
 
 const nextConfig = {
@@ -18,6 +21,7 @@ const nextConfig = {
   // },
   reactStrictMode: true, // Recommended for the `pages` directory, default in `app`.
   output: 'standalone', // Docker standalone 模式
+  assetPrefix: process.env.NODE_ENV === 'production' ? OSS_URL : undefined,
   images: {},
   webpack(config, { isServer }) {
     if (!isServer) {
@@ -54,7 +58,7 @@ const nextConfig = {
   },
 }
 
-const KEYS_TO_OMIT = ['webpackDevMiddleware', 'configOrigin', 'target', 'analyticsId', 'webpack5', 'amp', 'assetPrefix']
+const KEYS_TO_OMIT = ['webpackDevMiddleware', 'configOrigin', 'target', 'analyticsId', 'webpack5', 'amp']
 
 module.exports = (_phase, { defaultConfig }) => {
   const plugins = [[withPWA], [withBundleAnalyzer, {}]]
