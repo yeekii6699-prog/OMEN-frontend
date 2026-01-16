@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useGameStore } from '@/store/gameStore'
+import { CHOSEN_POSITIONS, getChosenPositions } from '@/constants/readingLayout'
 import { TarotCard } from './TarotCard'
 import { CardBurstEffect } from './CardBurstEffect'
 import { RingToInputEffect } from './RingToInputEffect'
@@ -16,11 +17,6 @@ const MOBILE_BREAKPOINT = 768
 const RING_CENTER = [0, -2, 0]
 const CARD_SIZE = { width: 1.2, height: 2 }
 const SELECTABLE_DOT = 0.15
-const CHOSEN_POSITIONS = [
-  [-2.5, 1.5, 16],
-  [0, 1.5, 16],
-  [2.5, 1.5, 16],
-]
 
 const HOVER = {
   lift: 0.25,
@@ -43,6 +39,12 @@ const ROTATION = {
   inertiaDamping: 1.6,
 }
 
+const PORTAL_SPIN = {
+  accel: 8,
+  max: 5,
+  damping: 6,
+}
+
 const DRAG_PLANE = {
   width: 40,
   height: 20,
@@ -51,12 +53,7 @@ const DRAG_PLANE = {
 const getLayout = (isMobile) => {
   const ringScale = isMobile ? 0.82 : 1
   const ringCenter = [RING_CENTER[0], isMobile ? -2.6 : RING_CENTER[1], RING_CENTER[2]]
-  const chosenZ = isMobile ? 18 : CHOSEN_POSITIONS[0][2]
-  const chosenPositions = CHOSEN_POSITIONS.map(([x, y]) => [
-    x * ringScale,
-    y * ringScale,
-    chosenZ,
-  ])
+  const chosenPositions = getChosenPositions(isMobile)
 
   return {
     ringScale,
@@ -88,6 +85,8 @@ const shuffleIndices = (count) => {
   return indices
 }
 
+const pickOrientation = () => (Math.random() < 0.5 ? 'upright' : 'reversed')
+
 const getDeltaRotation = (dx) => dx * ROTATION.dragRotate
 
 const clampExtraSpeed = (speed) => {
@@ -105,15 +104,19 @@ export function StarRing() {
     lastTime: 0,
   })
   const extraSpeedRef = useRef(0)
+  const portalSpinRef = useRef(0)
   const [hoveredCardKey, setHoveredCardKey] = useState(null)
   const [floatingCards, setFloatingCards] = useState([])
   const [inputStartPositions, setInputStartPositions] = useState([])
   const [inputActive, setInputActive] = useState(false)
   const phase = useGameStore((state) => state.phase) || 'PORTAL'
+  const portalHolding = useGameStore((state) => state.portalHolding) || false
   const revealedIndices = useGameStore((state) => state.revealedIndices) || []
   const revealCard = useGameStore((state) => state.revealCard) || (() => {})
   const setSelectedIndices = useGameStore((state) => state.setSelectedIndices) || (() => {})
   const setReadingReady = useGameStore((state) => state.setReadingReady) || (() => {})
+  const cardOrientations = useGameStore((state) => state.cardOrientations) || {}
+  const setCardOrientation = useGameStore((state) => state.setCardOrientation) || (() => {})
   const sessionId = useGameStore((state) => state.sessionId) || 0
   const sessionRef = useRef(sessionId)
   const isBurstOrReveal = phase === 'BURST' || phase === 'REVEAL'
@@ -131,6 +134,20 @@ export function StarRing() {
     const group = groupRef.current
     if (!group) return
 
+    if (portalHolding) {
+      portalSpinRef.current = Math.min(
+        PORTAL_SPIN.max,
+        portalSpinRef.current + PORTAL_SPIN.accel * delta
+      )
+    } else if (portalSpinRef.current > 0) {
+      portalSpinRef.current = THREE.MathUtils.damp(
+        portalSpinRef.current,
+        0,
+        PORTAL_SPIN.damping,
+        delta
+      )
+    }
+
     const isPaused =
       dragStateRef.current.active || hoveredCardKey !== null || isBurstOrReveal || shouldBurst
     if (!isPaused) {
@@ -141,7 +158,7 @@ export function StarRing() {
         delta
       )
 
-      const speed = ROTATION.baseSpeed + extraSpeedRef.current
+      const speed = ROTATION.baseSpeed + extraSpeedRef.current + portalSpinRef.current
       group.rotation.y += speed * delta
       return
     }
@@ -215,6 +232,7 @@ export function StarRing() {
     setInputActive(false)
     setInputStartPositions([])
     extraSpeedRef.current = 0
+    portalSpinRef.current = 0
     dragStateRef.current.active = false
     if (groupRef.current) {
       groupRef.current.rotation.y = 0
@@ -303,6 +321,10 @@ export function StarRing() {
         if (current.length >= MAX_SELECTED) return current
         if (current.some((card) => card.key === key)) return current
 
+        if (!cardOrientations[key]) {
+          setCardOrientation(key, pickOrientation())
+        }
+
         return [
           ...current,
           {
@@ -313,7 +335,7 @@ export function StarRing() {
       })
       setHoveredCardKey(null)
     },
-    [shouldBurst, isSession]
+    [shouldBurst, isSession, cardOrientations, setCardOrientation]
   )
 
   const handleRevealCard = useCallback(
@@ -359,6 +381,7 @@ export function StarRing() {
           cardKey={card.key}
           isRevealed={revealedSet.has(card.key)}
           isChosen={true} // 选中时就开始加载图片
+          isReversed={cardOrientations[card.key] === 'reversed'}
           canReveal={canReveal}
           onReveal={handleRevealCard}
           chosenScale={layout.chosenScale}
@@ -506,6 +529,7 @@ function ChosenCard({
   cardKey,
   isRevealed,
   isChosen,
+  isReversed,
   canReveal,
   onReveal,
   chosenScale,
@@ -546,6 +570,7 @@ function ChosenCard({
       rotation={[0, 0, 0]}
       isRevealed={isRevealed}
       isChosen={isChosen}
+      isReversed={isReversed}
       onCardClick={handleClick}
     />
   )

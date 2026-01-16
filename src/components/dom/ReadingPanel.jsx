@@ -6,7 +6,21 @@ import { useGameStore } from '@/store/gameStore'
 import { TAROT_DATA } from '@/constants/tarotData'
 const READING_ENDPOINT = '/api/reading'
 
+const getOrientationLabel = (orientation) => (orientation === 'reversed' ? '逆位' : '正位')
+
+const formatCardLabel = (card, orientation) => {
+  if (!card) return ''
+  const name = card.nameCN || card.name || 'Unknown'
+  return `${name}（${getOrientationLabel(orientation)}）`
+}
+
 const SECTION_LABELS = ['总体解读', '单牌解读', '行动建议']
+const READING_STEPS = ['focus_card_1', 'focus_card_2', 'focus_card_3', 'summary']
+const FOCUS_STEP_INDEX = {
+  focus_card_1: 0,
+  focus_card_2: 1,
+  focus_card_3: 2,
+}
 
 const PANEL_STYLE = {
   wrapper: {
@@ -142,6 +156,59 @@ const PANEL_STYLE = {
     color: '#d9caa5',
     fontSize: '12px',
     letterSpacing: '0.12em',
+  },
+  captionWrapper: {
+    position: 'fixed',
+    left: '50%',
+    bottom: '7vh',
+    transform: 'translateX(-50%)',
+    width: 'min(94vw, 880px)',
+    zIndex: 40,
+    pointerEvents: 'auto',
+  },
+  captionPanel: {
+    background: 'rgba(8, 10, 14, 0.7)',
+    border: '1px solid rgba(255, 215, 160, 0.18)',
+    borderRadius: '18px',
+    padding: '14px 16px',
+    boxShadow: '0 18px 45px rgba(0, 0, 0, 0.45)',
+    backdropFilter: 'blur(10px)',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
+  captionHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+  },
+  captionTitle: {
+    fontFamily: 'KaiTi, STKaiti, serif',
+    color: '#f7e7b3',
+    fontSize: '14px',
+    letterSpacing: '0.08em',
+  },
+  captionStep: {
+    fontSize: '11px',
+    color: '#d9caa5',
+    letterSpacing: '0.2em',
+  },
+  captionBody: {
+    color: '#f8f1de',
+    fontSize: '14px',
+    lineHeight: 1.7,
+    maxHeight: '28vh',
+    overflowY: 'auto',
+    paddingRight: '4px',
+    touchAction: 'pan-y',
+    WebkitOverflowScrolling: 'touch',
+  },
+  captionFooter: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: '10px',
   },
   modalOverlay: {
     position: 'fixed',
@@ -341,56 +408,220 @@ const buildPages = (text) => {
     : []
 }
 
+const getSectionContent = (pages, label) => {
+  if (!Array.isArray(pages)) return ''
+  const match = pages.find((page) => page.title === label)
+  return match ? match.content : ''
+}
+
+const getNextStep = (step) => {
+  const index = READING_STEPS.indexOf(step)
+  if (index === -1) return 'focus_card_1'
+  return READING_STEPS[index + 1] || 'idle'
+}
+
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+const findMarkerMatch = (text, patterns) => {
+  let best = null
+  patterns.forEach((pattern) => {
+    const match = text.match(pattern)
+    if (!match || match.index == null) return
+    if (!best || match.index < best.index) {
+      best = { index: match.index, length: match[0].length }
+    }
+  })
+  return best
+}
+
+const splitSingleCardContent = (text, cardsMeta) => {
+  if (!text || !Array.isArray(cardsMeta) || cardsMeta.length === 0) return []
+  const cardCount = cardsMeta.length
+  const cleanSection = (value) => {
+    let content = String(value || '').trim()
+    content = content.replace(/^\s*(\*\*|__)\s*/, '')
+    content = content.replace(
+      /^\s*(?:\*\*\s*)?(?:第\s*)?([1-3]|一|二|三)\s*(?:张|牌)?\s*[).、:：·-]\s*(?:\*\*)?\s*/m,
+      ''
+    )
+    content = content.replace(/(\*\*|__)\s*$/g, '')
+    return content.trim()
+  }
+
+  const splitByMarkers = (markers) => {
+    if (!markers.length) return []
+    const sorted = markers.slice().sort((a, b) => a.index - b.index)
+    const sections = Array(cardCount).fill('')
+    let nextFallback = 0
+    const claimFallbackIndex = () => {
+      while (nextFallback < cardCount && sections[nextFallback]) {
+        nextFallback += 1
+      }
+      if (nextFallback >= cardCount) return null
+      const idx = nextFallback
+      nextFallback += 1
+      return idx
+    }
+
+    sorted.forEach((marker, idx) => {
+      const start = marker.index + marker.length
+      const end = idx < sorted.length - 1 ? sorted[idx + 1].index : text.length
+      const content = cleanSection(text.slice(start, end))
+      const preferredIndex =
+        Number.isInteger(marker.cardIndex) && marker.cardIndex >= 0 && marker.cardIndex < cardCount
+          ? marker.cardIndex
+          : null
+      const targetIndex =
+        preferredIndex !== null && !sections[preferredIndex]
+          ? preferredIndex
+          : claimFallbackIndex()
+      if (targetIndex === null) return
+      sections[targetIndex] = content
+    })
+
+    return sections
+  }
+
+  const buildCardMarker = (card, index) => {
+    if (!card) return null
+    const name = card.name || ''
+    const orientation = card.orientationLabel || ''
+    if (!name) return null
+    const escapedName = escapeRegex(name)
+    const escapedOrientation = orientation ? escapeRegex(orientation) : ''
+    const numberPrefix =
+      '(?:(?:第\\s*(?:[1-3]|一|二|三)\\s*(?:张|牌)?\\s*(?:[).、:：·-]\\s*)?)|(?:[1-3]|一|二|三)\\s*(?:张|牌)?\\s*(?:[).、:：·-]\\s*))?'
+    const tail = '\\s*(?:[:：-]\\s*)?(?:\\*\\*)?'
+    const patterns = [
+      escapedOrientation
+        ? new RegExp(
+            `(^|\\n)\\s*(?:\\*\\*\\s*)?${numberPrefix}${escapedName}\\s*[（(]?\\s*${escapedOrientation}\\s*[)）]?${tail}`,
+            'm'
+          )
+        : null,
+      escapedOrientation
+        ? new RegExp(
+            `(^|\\n)\\s*(?:\\*\\*\\s*)?${escapedName}\\s*[（(]?\\s*${escapedOrientation}\\s*[)）]?${tail}`,
+            'm'
+          )
+        : null,
+    ].filter(Boolean)
+    const marker = findMarkerMatch(text, patterns)
+    return marker ? { ...marker, cardIndex: index } : null
+  }
+
+  const cardMarkers = cardsMeta.map((card, index) => buildCardMarker(card, index)).filter(Boolean)
+  if (cardMarkers.length >= 2) {
+    return splitByMarkers(cardMarkers)
+  }
+
+  const mapChineseNumber = (value) => {
+    if (!value) return null
+    if (value === '一') return 1
+    if (value === '二') return 2
+    if (value === '三') return 3
+    return null
+  }
+
+  const numberedRegex =
+    /(^|\n)\s*(?:\*\*\s*)?(?:第\s*)?([1-3]|一|二|三)\s*(?:张|牌)?\s*(?:[).、:：·-]|$)\s*(?:\*\*)?/g
+  const numberedMarkers = []
+  let numberedMatch = numberedRegex.exec(text)
+  while (numberedMatch) {
+    const rawNumber = numberedMatch[2]
+    const parsed = Number.isNaN(Number(rawNumber))
+      ? mapChineseNumber(rawNumber)
+      : Number(rawNumber)
+    const cardIndex = parsed ? parsed - 1 : null
+    numberedMarkers.push({
+      index: numberedMatch.index,
+      length: numberedMatch[0].length,
+      cardIndex,
+    })
+    numberedMatch = numberedRegex.exec(text)
+  }
+
+  if (numberedMarkers.length >= 2) {
+    return splitByMarkers(numberedMarkers)
+  }
+
+  const sections = splitIntoSections(text)
+  if (sections.length >= cardCount) {
+    return sections.slice(0, cardCount).map((section) => cleanSection(section))
+  }
+  return []
+}
+
 export function ReadingPanel() {
   const revealedIndices = useGameStore((state) => state.revealedIndices) || []
   const selectedIndices = useGameStore((state) => state.selectedIndices) || []
   const readingReady = useGameStore((state) => state.readingReady) || false
+  const readingStep = useGameStore((state) => state.readingStep) || 'idle'
+  const setReadingStep = useGameStore((state) => state.setReadingStep) || (() => {})
+  const cardOrientations = useGameStore((state) => state.cardOrientations) || {}
   const resetGame = useGameStore((state) => state.resetGame) || (() => {})
   const [visible, setVisible] = useState(false)
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [isStreaming, setIsStreaming] = useState(false)
   const [pages, setPages] = useState([])
-  const [pageIndex, setPageIndex] = useState(0)
-  const [unlockedCount, setUnlockedCount] = useState(0)
-  const [isMobile, setIsMobile] = useState(false)
   const [showFeedback, setShowFeedback] = useState(false)
   const [feedbackScore, setFeedbackScore] = useState(0)
   const [feedbackText, setFeedbackText] = useState('')
   const [feedbackStatus, setFeedbackStatus] = useState('idle')
   const [feedbackError, setFeedbackError] = useState('')
-  const swipeRef = useRef({ x: 0, y: 0 })
+  const streamControllerRef = useRef(null)
+  const streamBufferRef = useRef('')
+  const streamFrameRef = useRef(null)
+  const streamDoneRef = useRef(false)
   const feedbackTimerRef = useRef(null)
 
   const chosenIndices = useMemo(() => {
     return selectedIndices.filter((index) => revealedIndices.includes(index)).slice(0, 3)
   }, [selectedIndices, revealedIndices])
 
-  const chosenNames = useMemo(() => {
-    return chosenIndices.map((index) => TAROT_DATA[index]?.nameCN).filter(Boolean)
-  }, [chosenIndices])
+  const chosenLabels = useMemo(() => {
+    return chosenIndices
+      .map((index) => {
+        const card = TAROT_DATA[index]
+        if (!card) return ''
+        return formatCardLabel(card, cardOrientations[index])
+      })
+      .filter(Boolean)
+  }, [chosenIndices, cardOrientations])
+
+  const chosenCardsMeta = useMemo(() => {
+    return chosenIndices.map((index, idx) => {
+      const card = TAROT_DATA[index] || {}
+      return {
+        label: chosenLabels[idx] || '',
+        name: card.nameCN || card.name || '',
+        orientationLabel: getOrientationLabel(cardOrientations[index]),
+      }
+    })
+  }, [chosenIndices, chosenLabels, cardOrientations])
 
   useEffect(() => {
-    setVisible(readingReady && chosenNames.length === 3)
-  }, [readingReady, chosenNames.length])
+    setVisible(readingReady && chosenLabels.length === 3)
+  }, [readingReady, chosenLabels.length])
 
   useEffect(() => {
-    const update = () => setIsMobile(window.innerWidth < 768)
-    update()
-    window.addEventListener('resize', update)
-    return () => window.removeEventListener('resize', update)
-  }, [])
+    if (!readingReady || chosenLabels.length !== 3) {
+      setReadingStep('idle')
+    }
+  }, [readingReady, chosenLabels.length, setReadingStep])
 
   useEffect(() => {
     if (!readingReady) {
+      resetStreamState()
+      setReadingStep('idle')
       setQuestion('')
       setAnswer('')
       setError('')
       setLoading(false)
       setPages([])
-      setPageIndex(0)
-      setUnlockedCount(0)
       setShowFeedback(false)
       setFeedbackScore(0)
       setFeedbackText('')
@@ -404,10 +635,9 @@ export function ReadingPanel() {
   }, [readingReady])
 
   useEffect(() => {
+    if (isStreaming) return
     if (!answer) {
       setPages([])
-      setPageIndex(0)
-      setUnlockedCount(0)
       setShowFeedback(false)
       setFeedbackScore(0)
       setFeedbackText('')
@@ -417,21 +647,27 @@ export function ReadingPanel() {
     }
     const nextPages = buildPages(answer)
     setPages(nextPages)
-    setPageIndex(0)
-    setUnlockedCount(nextPages.length ? 1 : 0)
     setShowFeedback(false)
     setFeedbackScore(0)
     setFeedbackText('')
     setFeedbackStatus('idle')
     setFeedbackError('')
-  }, [answer])
+  }, [answer, isStreaming])
 
   useEffect(() => {
-    if (!answer || pages.length === 0) return
-    if (pageIndex === pages.length - 1 && feedbackStatus !== 'success') {
-      setShowFeedback(true)
+    if (isStreaming) return
+    if (!answer) {
+      setShowFeedback(false)
+      return
     }
-  }, [answer, pages.length, pageIndex, feedbackStatus])
+    if (readingStep === 'summary' && feedbackStatus !== 'success') {
+      setShowFeedback(true)
+      return
+    }
+    if (readingStep !== 'summary' && showFeedback) {
+      setShowFeedback(false)
+    }
+  }, [answer, feedbackStatus, isStreaming, readingStep, showFeedback])
 
   useEffect(() => {
     return () => {
@@ -442,6 +678,89 @@ export function ReadingPanel() {
     }
   }, [])
 
+  useEffect(() => {
+    return () => {
+      if (streamControllerRef.current) {
+        streamControllerRef.current.abort()
+        streamControllerRef.current = null
+      }
+      if (streamFrameRef.current) {
+        cancelAnimationFrame(streamFrameRef.current)
+        streamFrameRef.current = null
+      }
+      streamBufferRef.current = ''
+      streamDoneRef.current = false
+    }
+  }, [])
+
+  const focusIndex = FOCUS_STEP_INDEX[readingStep] ?? -1
+  const currentCardLabel = focusIndex >= 0 ? chosenLabels[focusIndex] : ''
+  const summaryContent = useMemo(
+    () => getSectionContent(pages, SECTION_LABELS[0]) || pages[0]?.content || '',
+    [pages]
+  )
+  const singleCardContent = useMemo(
+    () => getSectionContent(pages, SECTION_LABELS[1]) || pages[1]?.content || '',
+    [pages]
+  )
+  const actionContent = useMemo(() => getSectionContent(pages, SECTION_LABELS[2]) || '', [pages])
+  const summaryText = useMemo(() => {
+    const blocks = []
+    if (summaryContent) blocks.push(summaryContent)
+    if (actionContent) blocks.push(actionContent)
+    return blocks.join('\n\n')
+  }, [summaryContent, actionContent])
+  const singleCardSections = useMemo(() => {
+    return splitSingleCardContent(singleCardContent, chosenCardsMeta)
+  }, [singleCardContent, chosenCardsMeta])
+  const captionText =
+    readingStep === 'summary'
+      ? summaryText
+      : focusIndex >= 0
+        ? singleCardSections[focusIndex] || ''
+        : ''
+
+  const flushStreamBuffer = () => {
+    if (!streamBufferRef.current) {
+      streamFrameRef.current = null
+      if (streamDoneRef.current) {
+        streamDoneRef.current = false
+        setIsStreaming(false)
+        setLoading(false)
+        streamControllerRef.current = null
+      }
+      return
+    }
+
+    const codePoint = streamBufferRef.current.codePointAt(0)
+    const nextChar = codePoint !== undefined ? String.fromCodePoint(codePoint) : ''
+    streamBufferRef.current = streamBufferRef.current.slice(nextChar.length || 1)
+    setAnswer((prev) => prev + nextChar)
+    streamFrameRef.current = requestAnimationFrame(flushStreamBuffer)
+  }
+
+  const enqueueStreamText = (chunk) => {
+    if (!chunk) return
+    streamBufferRef.current += chunk
+    if (!streamFrameRef.current) {
+      streamFrameRef.current = requestAnimationFrame(flushStreamBuffer)
+    }
+  }
+
+  const resetStreamState = () => {
+    if (streamControllerRef.current) {
+      streamControllerRef.current.abort()
+      streamControllerRef.current = null
+    }
+    if (streamFrameRef.current) {
+      cancelAnimationFrame(streamFrameRef.current)
+      streamFrameRef.current = null
+    }
+    streamBufferRef.current = ''
+    streamDoneRef.current = false
+    setIsStreaming(false)
+  }
+
   const handleSubmit = async () => {
     if (loading) return
     const trimmed = question.trim()
@@ -449,20 +768,32 @@ export function ReadingPanel() {
       setError('先写下你的问题吧。')
       return
     }
-    if (chosenNames.length < 3) {
+    if (chosenLabels.length < 3) {
       setError('卡牌还没准备好，再等一下。')
       return
     }
 
+    resetStreamState()
+    setReadingStep('focus_card_1')
     setLoading(true)
+    setIsStreaming(true)
     setError('')
     setAnswer('')
+    setPages([])
+    setShowFeedback(false)
+    setFeedbackScore(0)
+    setFeedbackText('')
+    setFeedbackStatus('idle')
+    setFeedbackError('')
 
     try {
       let recordId = ''
       try {
         recordId = localStorage.getItem('omen_visit_id') || ''
       } catch (err) {}
+
+      const controller = new AbortController()
+      streamControllerRef.current = controller
 
       const res = await fetch(READING_ENDPOINT, {
         method: 'POST',
@@ -471,42 +802,61 @@ export function ReadingPanel() {
         },
         body: JSON.stringify({
           question: trimmed,
-          cards: chosenNames,
+          cards: chosenLabels,
           recordId: recordId || undefined,
         }),
+        signal: controller.signal,
       })
 
-      let data = null
-      try {
-        data = await res.json()
-      } catch (parseError) {
-        data = null
-      }
-
       if (!res.ok) {
+        let data = null
+        try {
+          data = await res.json()
+        } catch (parseError) {
+          data = null
+        }
         setError(data?.error?.message || data?.error || '解牌失败了，请稍后再试。')
         setLoading(false)
+        setIsStreaming(false)
+        setReadingStep('idle')
         return
       }
 
-      const content = data?.content?.trim()
-      setAnswer(content || '解牌完成，但没有拿到内容。')
-      setLoading(false)
+      if (!res.body) {
+        throw new Error('Missing stream body')
+      }
+
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      while (true) {
+        const { value, done } = await reader.read()
+        if (done) break
+        if (value) {
+          enqueueStreamText(decoder.decode(value, { stream: true }))
+        }
+      }
+      streamDoneRef.current = true
+      if (!streamFrameRef.current) {
+        flushStreamBuffer()
+      }
     } catch (err) {
+      if (err?.name === 'AbortError') return
       setError('网络不太稳定，稍后再试。')
       setLoading(false)
+      setIsStreaming(false)
+      setReadingStep('idle')
     }
   }
 
   const handleReset = () => {
     if (loading) return
+    resetStreamState()
     resetGame()
+    setReadingStep('idle')
     setQuestion('')
     setAnswer('')
     setError('')
     setPages([])
-    setPageIndex(0)
-    setUnlockedCount(0)
     setShowFeedback(false)
     setFeedbackScore(0)
     setFeedbackText('')
@@ -575,41 +925,21 @@ export function ReadingPanel() {
       })
   }
 
-  const handlePrevPage = () => {
-    if (pageIndex <= 0) return
-    setPageIndex(pageIndex - 1)
-  }
-
-  const handleNextPage = () => {
-    if (pages.length === 0) return
-    if (pageIndex < unlockedCount - 1) {
-      setPageIndex(pageIndex + 1)
+  const handleNextStep = () => {
+    if (loading) return
+    if (readingStep === 'summary') {
+      handleReset()
       return
     }
-    if (unlockedCount < pages.length) {
-      const nextUnlocked = unlockedCount + 1
-      setUnlockedCount(nextUnlocked)
-      setPageIndex(nextUnlocked - 1)
-    }
+    const nextStep = getNextStep(readingStep)
+    setReadingStep(nextStep)
   }
 
-  const handleTouchStart = (event) => {
-    const touch = event.touches?.[0]
-    if (!touch) return
-    swipeRef.current = { x: touch.clientX, y: touch.clientY }
-  }
-
-  const handleTouchEnd = (event) => {
-    const touch = event.changedTouches?.[0]
-    if (!touch) return
-    const dx = touch.clientX - swipeRef.current.x
-    const dy = touch.clientY - swipeRef.current.y
-    if (Math.abs(dx) < 40 || Math.abs(dx) < Math.abs(dy)) return
-    if (dx < 0) {
-      handleNextPage()
-    } else {
-      handlePrevPage()
-    }
+  const handlePrevStep = () => {
+    if (loading) return
+    const index = READING_STEPS.indexOf(readingStep)
+    if (index <= 0) return
+    setReadingStep(READING_STEPS[index - 1])
   }
 
   if (!visible) {
@@ -626,10 +956,17 @@ export function ReadingPanel() {
     )
   }
 
-  const totalPages = pages.length || 1
-  const currentPage = pages[pageIndex] || { title: '解读', content: answer }
-  const hasLockedNext = unlockedCount < totalPages && pageIndex >= unlockedCount - 1
-  const nextLabel = hasLockedNext ? '继续揭示' : '下一页'
+  const nextLabel = readingStep === 'summary' ? '再算一卦' : readingStep === 'focus_card_3' ? '查看总结' : '下一张'
+  const canPrev = readingStep !== 'focus_card_1'
+  const captionTitle =
+    focusIndex >= 0
+      ? `第${focusIndex + 1}张${currentCardLabel ? ` · ${currentCardLabel}` : ''}`
+      : '总结'
+  const captionStepLabel = focusIndex >= 0 ? `${focusIndex + 1} / 3` : '总结'
+  const showInputPanel = visible && readingStep === 'idle'
+  const showCaptionPanel = visible && readingStep !== 'idle'
+  const captionDisplayText = isStreaming ? answer : captionText
+  const isCaptionLoading = loading && !captionDisplayText
   const isSubmittingFeedback = feedbackStatus === 'submitting'
   const isFeedbackSuccess = feedbackStatus === 'success'
   const feedbackButtonLabel = isFeedbackSuccess ? '已提交' : isSubmittingFeedback ? '提交中…' : '提交反馈'
@@ -650,113 +987,116 @@ export function ReadingPanel() {
           from { opacity: 0.3; }
           to { opacity: 1; }
         `}</style>
-      <div
-        style={{
-          ...PANEL_STYLE.wrapper,
-          opacity: 1,
-          pointerEvents: 'auto',
-          transform: 'translateX(-50%) translateY(0)',
-          transition: 'all 500ms ease',
-        }}
-      >
-        <div style={PANEL_STYLE.panel}>
-        <div style={PANEL_STYLE.title}>解牌入口已成形</div>
-        <div style={PANEL_STYLE.chips}>
-          {chosenNames.map((name) => (
-            <span key={name} style={PANEL_STYLE.chip}>
-              {name}
-            </span>
-          ))}
-        </div>
-        <textarea
-          placeholder="写下你的问题，比如：这段关系接下来会如何发展？"
-          value={question}
-          onChange={(event) => setQuestion(event.target.value)}
-          onKeyDown={handleKeyDown}
-          style={PANEL_STYLE.input}
-        />
-        <div style={PANEL_STYLE.actions}>
-          <button
-            type="button"
-            style={{
-              ...PANEL_STYLE.secondaryButton,
-              opacity: loading ? 0.7 : 1,
-              cursor: loading ? 'not-allowed' : 'pointer',
-            }}
-            onClick={handleReset}
-            disabled={loading}
-          >
-            再算一卦
-          </button>
-          <button
-            type="button"
-            style={{
-              ...PANEL_STYLE.button,
-              opacity: loading ? 0.7 : 1,
-              cursor: loading ? 'not-allowed' : 'pointer',
-            }}
-            onClick={handleSubmit}
-            disabled={loading}
-          >
-            {loading ? <LoadingButton /> : '开始解牌'}
-          </button>
-        </div>
-        {error && <div style={PANEL_STYLE.error}>{error}</div>}
-        {answer && (
-          <div style={PANEL_STYLE.answer}>
-            <div style={PANEL_STYLE.answerHeader}>
-              <div style={PANEL_STYLE.answerStep}>
-                第 {Math.min(pageIndex + 1, totalPages)} 步 / {totalPages}
-              </div>
-              <div style={PANEL_STYLE.answerTitle}>{currentPage.title}</div>
-              {hasLockedNext && <div style={PANEL_STYLE.answerHint}>继续揭示下一步</div>}
+      {showInputPanel && (
+        <div
+          style={{
+            ...PANEL_STYLE.wrapper,
+            opacity: 1,
+            pointerEvents: 'auto',
+            transform: 'translateX(-50%) translateY(0)',
+            transition: 'all 500ms ease',
+          }}
+        >
+          <div style={PANEL_STYLE.panel}>
+            <div style={PANEL_STYLE.title}>解牌入口已成形</div>
+            <div style={PANEL_STYLE.chips}>
+              {chosenLabels.map((name) => (
+                <span key={name} style={PANEL_STYLE.chip}>
+                  {name}
+                </span>
+              ))}
             </div>
-            <div
-              style={{
-                ...PANEL_STYLE.answerCard,
-                maxHeight: isMobile ? '32vh' : '40vh',
-              }}
-              onTouchStart={handleTouchStart}
-              onTouchEnd={handleTouchEnd}
-            >
-              <ReactMarkdown components={markdownComponents}>
-                {currentPage.content || answer}
-              </ReactMarkdown>
+            <textarea
+              placeholder="写下你的问题，比如：这段关系接下来会如何发展？"
+              value={question}
+              onChange={(event) => setQuestion(event.target.value)}
+              onKeyDown={handleKeyDown}
+              style={PANEL_STYLE.input}
+            />
+            <div style={PANEL_STYLE.actions}>
+              <button
+                type="button"
+                style={{
+                  ...PANEL_STYLE.secondaryButton,
+                  opacity: loading ? 0.7 : 1,
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                }}
+                onClick={handleReset}
+                disabled={loading}
+              >
+                再算一卦
+              </button>
+              <button
+                type="button"
+                style={{
+                  ...PANEL_STYLE.button,
+                  opacity: loading ? 0.7 : 1,
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                }}
+                onClick={handleSubmit}
+                disabled={loading}
+              >
+                {loading ? <LoadingButton /> : '开始解牌'}
+              </button>
             </div>
-            {totalPages > 1 && (
-              <div style={PANEL_STYLE.pager}>
-                <button
-                  type="button"
-                  style={{
-                    ...PANEL_STYLE.pagerButton,
-                    opacity: pageIndex === 0 ? 0.4 : 1,
-                    cursor: pageIndex === 0 ? 'not-allowed' : 'pointer',
-                  }}
-                  onClick={handlePrevPage}
-                  disabled={pageIndex === 0}
-                >
-                  上一页
-                </button>
-                <div style={PANEL_STYLE.pagerIndicator}>
-                  {pageIndex + 1} / {totalPages}
-                </div>
-                <button
-                  type="button"
-                  style={{
-                    ...PANEL_STYLE.pagerButton,
-                    opacity: pageIndex >= totalPages - 1 && !hasLockedNext ? 0.4 : 1,
-                    cursor: pageIndex >= totalPages - 1 && !hasLockedNext ? 'not-allowed' : 'pointer',
-                  }}
-                  onClick={handleNextPage}
-                  disabled={pageIndex >= totalPages - 1 && !hasLockedNext}
-                >
-                  {nextLabel}
-                </button>
-              </div>
-            )}
+            {error && <div style={PANEL_STYLE.error}>{error}</div>}
           </div>
-        )}
-      </div>
+        </div>
+      )}
+      {showCaptionPanel && (
+        <div
+          style={{
+            ...PANEL_STYLE.captionWrapper,
+            opacity: 1,
+            transform: 'translateX(-50%) translateY(0)',
+            transition: 'all 500ms ease',
+          }}
+        >
+          <div style={PANEL_STYLE.captionPanel}>
+            <div style={PANEL_STYLE.captionHeader}>
+              <div style={PANEL_STYLE.captionTitle}>{captionTitle}</div>
+              <div style={PANEL_STYLE.captionStep}>{captionStepLabel}</div>
+            </div>
+            <div style={PANEL_STYLE.captionBody}>
+              {isCaptionLoading ? (
+                <LoadingButton />
+              ) : captionDisplayText ? (
+                <ReactMarkdown components={markdownComponents}>{captionDisplayText}</ReactMarkdown>
+              ) : (
+                <span>解读整理中…</span>
+              )}
+            </div>
+            <div style={PANEL_STYLE.captionFooter}>
+              <button
+                type="button"
+                style={{
+                  ...PANEL_STYLE.secondaryButton,
+                  padding: '8px 14px',
+                  opacity: !canPrev || loading ? 0.45 : 1,
+                  cursor: !canPrev || loading ? 'not-allowed' : 'pointer',
+                }}
+                onClick={handlePrevStep}
+                disabled={!canPrev || loading}
+              >
+                上一张
+              </button>
+              <button
+                type="button"
+                style={{
+                  ...PANEL_STYLE.button,
+                  padding: '8px 16px',
+                  opacity: loading ? 0.7 : 1,
+                  cursor: loading ? 'not-allowed' : 'pointer',
+                }}
+                onClick={handleNextStep}
+                disabled={loading}
+              >
+                {nextLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {showFeedback && (
         <div style={PANEL_STYLE.modalOverlay}>
           <div style={PANEL_STYLE.modalCard}>
@@ -809,7 +1149,6 @@ export function ReadingPanel() {
           </div>
         </div>
       )}
-      </div>
     </>
   )
 }

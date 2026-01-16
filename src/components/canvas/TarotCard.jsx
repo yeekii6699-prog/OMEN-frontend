@@ -1,8 +1,7 @@
 'use client'
 
-import { forwardRef, useRef, useState, useEffect, Suspense } from 'react'
+import { forwardRef, useRef, useState, useEffect } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { Text } from '@react-three/drei'
 import * as THREE from 'three'
 import { TAROT_DATA } from '@/constants/tarotData'
 
@@ -11,11 +10,6 @@ const BACK_STYLE = {
   color: '#ffffff',
   opacity: 1,
 }
-const TEXT_STYLE = {
-  color: '#111827',
-  fontSize: 0.16,
-}
-
 // 预加载背面纹理（只需要加载一次）
 let backTextureCache = null
 
@@ -46,6 +40,7 @@ export const TarotCard = forwardRef(function TarotCard(
     rotation = [0, 0, 0],
     isRevealed = false,
     isChosen = false, // 新增：卡牌是否已被选中
+    isReversed = false,
     showFront = true,
     backDoubleSided = false,
     onCardClick,
@@ -59,7 +54,6 @@ export const TarotCard = forwardRef(function TarotCard(
 ) {
   const flipRef = useRef(null)
   const tarot = TAROT_DATA[index] || {}
-  const displayName = tarot.nameCN || tarot.name || 'Unknown'
   const backTexture = useBackTexture()
   const [frontTexture, setFrontTexture] = useState(null)
   const frontMap = frontTexture || backTexture
@@ -138,7 +132,7 @@ export const TarotCard = forwardRef(function TarotCard(
           </mesh>
         )}
         {showFront && (
-          <mesh position={[0, 0, -0.002]} rotation={[0, Math.PI, 0]}>
+          <mesh position={[0, 0, -0.002]} rotation={[0, Math.PI, isReversed ? Math.PI : 0]}>
             <planeGeometry args={[CARD_SIZE.width, CARD_SIZE.height]} />
             <meshBasicMaterial
               map={frontMap}
@@ -147,21 +141,6 @@ export const TarotCard = forwardRef(function TarotCard(
               transparent={false}
               toneMapped={false}
             />
-            {isRevealed && (
-              <Suspense fallback={null}>
-                <Text
-                  position={[0, -0.78, 0.01]}
-                  fontSize={TEXT_STYLE.fontSize}
-                  color={TEXT_STYLE.color}
-                  anchorX="center"
-                  anchorY="middle"
-                  maxWidth={CARD_SIZE.width * 0.9}
-                  textAlign="center"
-                >
-                  {displayName}
-                </Text>
-              </Suspense>
-            )}
           </mesh>
         )}
       </group>

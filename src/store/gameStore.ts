@@ -14,6 +14,13 @@ export type GamePhase =
   | 'BURST'    // 结算前的坍缩动画
   | 'REVEAL'   // 最终结果页
 
+export type ReadingStep =
+  | 'idle'
+  | 'focus_card_1'
+  | 'focus_card_2'
+  | 'focus_card_3'
+  | 'summary'
+
 /**
  * 犹豫指标数据结构 - 采集用户输入行为特征
  */
@@ -40,6 +47,8 @@ export interface ChatTurn {
   metrics?: HesitationMetrics
 }
 
+export type CardOrientation = 'upright' | 'reversed'
+
 // ============================================
 // Store 定义 (Store Definition)
 // ============================================
@@ -56,8 +65,14 @@ interface GameState {
   revealedIndices: number[]
   /** 已选中的卡牌索引 */
   selectedIndices: number[]
+  /** 卡牌正逆位（key 为卡牌索引） */
+  cardOrientations: Record<number, CardOrientation>
+  /** 法阵长按状态 */
+  portalHolding: boolean
   /** 解牌输入是否就绪 */
   readingReady: boolean
+  /** 沉浸式解读步骤 */
+  readingStep: ReadingStep
   /** 轮次标识，用于触发前端重置 */
   sessionId: number
 
@@ -70,8 +85,14 @@ interface GameState {
   revealCard: (index: number) => void
   /** 设置已选中的卡牌 */
   setSelectedIndices: (indices: number[]) => void
+  /** 设置卡牌正逆位 */
+  setCardOrientation: (index: number, orientation: CardOrientation) => void
+  /** 设置法阵长按状态 */
+  setPortalHolding: (holding: boolean) => void
   /** 设置解牌输入状态 */
   setReadingReady: (ready: boolean) => void
+  /** 设置解读步骤 */
+  setReadingStep: (step: ReadingStep) => void
   /** 重置游戏状态 */
   resetGame: () => void
 }
@@ -82,7 +103,10 @@ const initialState = {
   currentHesitation: null,
   revealedIndices: [],
   selectedIndices: [],
+  cardOrientations: {},
+  portalHolding: false,
   readingReady: false,
+  readingStep: 'idle' as ReadingStep,
   sessionId: 0,
 }
 
@@ -120,7 +144,19 @@ export const useGameStore = create<GameState>((set) => ({
 
   setSelectedIndices: (indices) => set({ selectedIndices: indices }),
 
+  setCardOrientation: (index, orientation) =>
+    set((state) => ({
+      cardOrientations: {
+        ...state.cardOrientations,
+        [index]: orientation,
+      },
+    })),
+
+  setPortalHolding: (holding) => set({ portalHolding: holding }),
+
   setReadingReady: (ready) => set({ readingReady: ready }),
+
+  setReadingStep: (readingStep) => set({ readingStep }),
 
   resetGame: () =>
     set((state) => ({
