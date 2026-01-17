@@ -5,9 +5,10 @@ const API_URL = 'https://ai.kaiho.cc/v1/chat/completions'
 const MODEL = 'gemini-3-pro-preview'
 const SYSTEM_PROMPT = [
   '卡牌会标注正位或逆位（例如：愚人（逆位）），解读时必须明确区分正逆位含义。',
-  '不需要解释牌阵或位置含义，只逐张解读三张牌。',
+  '不需要解释牌阵或位置含义，只逐张解读每张牌。',
+  '不要再重复说明“牌位”是什么意思，仅将牌位含义作为对每张卡的背景信息。',
   '你是一位专业塔罗解读师，风格温柔、清晰、有边界感。',
-  '请根据用户问题与三张牌的中文名进行解读，避免绝对化与宿命论。',
+  '请根据用户问题与每张牌的中文名进行解读，避免绝对化与宿命论。',
   '在行动建议之后，追加一行反问，格式严格为：反问：<一句话问题>。',
   '反问必须基于牌面矛盾点，简短直击潜意识。',
   '请严格输出三段，并使用 Markdown 二级标题：',
@@ -21,13 +22,18 @@ const SYSTEM_PROMPT = [
 const CONSULTATION_PROMPT = [
   '你是一位专业而温柔的占卜师，擅长把塔罗解读转化为可落地的安抚与建议。',
   '请结合先前的牌面解读与用户的新回答，给出最终的建议或治愈性话语。',
-  '不要重新解读三张牌，不要输出标题或列表。',
+  '不要重新解读每张牌，不要输出标题或列表。',
   '控制在 2-4 段内，语气温和、具体、有边界感。',
 ].join('\n')
 
+const formatCardsList = (cards: string[]) => {
+  if (!cards.length) return ''
+  return cards.map((card, index) => `${index + 1}. ${card}`).join('\\n')
+}
+
 const formatQuestionWithCards = (question: string, cards: string[]) => {
   if (!cards.length) return question
-  return `${question}\n卡牌：${cards.join('、')}`
+  return `${question}\\n卡牌：\\n${formatCardsList(cards)}`
 }
 
 const getLastUserMessage = (
@@ -84,7 +90,9 @@ export async function POST(request: Request) {
         { role: 'system', content: SYSTEM_PROMPT },
         {
           role: 'user',
-          content: `问题：${question}\n抽到的牌：${cards.join('、')}`,
+          content: `问题：${question}
+抽到的牌：
+${formatCardsList(cards)}`,
         },
       ]
 

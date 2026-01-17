@@ -51,7 +51,6 @@ export function PortalHexagram() {
   const ringWireRef = useRef(null)
   const ringWashRef = useRef(null)
   const progressStateRef = useRef({ value: 0 })
-  const shuffleAudioRef = useRef(null)
   const pulseRef = useRef({ active: false, start: 0, duration: 0.9 })
 
   const [hovered, setHovered] = useState(false)
@@ -89,83 +88,6 @@ export function PortalHexagram() {
 
   const { camera } = useThree()
 
-  const ensureShuffleAudio = () => {
-    if (shuffleAudioRef.current || typeof window === 'undefined') return
-    const AudioContext = window.AudioContext || window.webkitAudioContext
-    if (!AudioContext) return
-
-    const ctx = new AudioContext()
-    const bufferSize = Math.floor(ctx.sampleRate * 1.2)
-    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate)
-    const data = buffer.getChannelData(0)
-    for (let i = 0; i < bufferSize; i += 1) {
-      data[i] = (Math.random() * 2 - 1) * 0.45
-    }
-
-    const source = ctx.createBufferSource()
-    source.buffer = buffer
-    source.loop = true
-
-    const filter = ctx.createBiquadFilter()
-    filter.type = 'bandpass'
-    filter.frequency.value = 1200
-    filter.Q.value = 0.7
-
-    const gain = ctx.createGain()
-    gain.gain.value = 0
-
-    const lfo = ctx.createOscillator()
-    lfo.type = 'sine'
-    lfo.frequency.value = 7
-
-    const lfoGain = ctx.createGain()
-    lfoGain.gain.value = 0.03
-
-    lfo.connect(lfoGain)
-    lfoGain.connect(gain.gain)
-    source.connect(filter)
-    filter.connect(gain)
-    gain.connect(ctx.destination)
-    source.start()
-    lfo.start()
-
-    shuffleAudioRef.current = { ctx, gain, source, lfo }
-  }
-
-  const startShuffleAudio = () => {
-    ensureShuffleAudio()
-    const audio = shuffleAudioRef.current
-    if (!audio) return
-    if (audio.ctx.state === 'suspended') {
-      audio.ctx.resume().catch(() => {})
-    }
-    const now = audio.ctx.currentTime
-    audio.gain.gain.cancelScheduledValues(now)
-    audio.gain.gain.setTargetAtTime(0.08, now, 0.05)
-  }
-
-  const stopShuffleAudio = () => {
-    const audio = shuffleAudioRef.current
-    if (!audio) return
-    const now = audio.ctx.currentTime
-    audio.gain.gain.cancelScheduledValues(now)
-    audio.gain.gain.setTargetAtTime(0, now, 0.07)
-  }
-
-  useEffect(() => {
-    return () => {
-      const audio = shuffleAudioRef.current
-      if (!audio) return
-      try {
-        audio.source.stop()
-        audio.lfo.stop()
-      } catch (err) {}
-      if (audio.ctx?.state && audio.ctx.state !== 'closed') {
-        audio.ctx.close?.().catch(() => {})
-      }
-    }
-  }, [])
-
   useEffect(() => {
     if (!portalPulseId) return
     pulseRef.current.active = true
@@ -188,7 +110,6 @@ export function PortalHexagram() {
         holdRef.current.flashStart = performance.now()
         holdRef.current.warpAt = holdRef.current.flashStart + FLASH.warpDelay * 1000
         setPortalHolding(false)
-        stopShuffleAudio()
       }
     } else if (!holdRef.current.active && holdProgress > 0) {
       holdRef.current.progress = THREE.MathUtils.damp(holdProgress, 0, 10, delta)
@@ -363,7 +284,6 @@ export function PortalHexagram() {
     holdRef.current.progress = 0
     holdRef.current.spinBoost = 0
     setPortalHolding(true)
-    startShuffleAudio()
     if (e.target?.setPointerCapture) e.target.setPointerCapture(e.pointerId)
   }
 
@@ -374,7 +294,6 @@ export function PortalHexagram() {
       holdRef.current.progress = 0
     }
     setPortalHolding(false)
-    stopShuffleAudio()
     if (e.target?.releasePointerCapture) e.target.releasePointerCapture(e.pointerId)
   }
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useMemo, useEffect, useState } from 'react'
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { useGameStore } from '@/store/gameStore'
 import { getSpreadById, getPreviewPositions, pickRandomPreviewIndices } from '@/constants/spreadConfig'
 import * as THREE from 'three'
@@ -11,6 +11,9 @@ const CARD_SIZE = { width: 1.2, height: 2 }
 
 // 预览阶段卡片放置的 Z 位置
 const PREVIEW_Z = 12
+
+// 移动端断点（与 StarRing 保持一致）
+const MOBILE_BREAKPOINT = 768
 
 // 动画参数
 const FLY_IN_DURATION = 0.7 // 飞入动画持续时间（秒）
@@ -33,44 +36,6 @@ const TransitionPhase = {
   ENTERING: 'entering',
 }
 
-// 移动端检测阈值
-const MOBILE_BREAKPOINT = 768
-
-/**
- * 稳定的移动端检测 Hook
- * 使用延迟初始化避免水合不一致
- */
-function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(false)
-  const initializedRef = useRef(false)
-
-  useEffect(() => {
-    if (initializedRef.current) return
-    initializedRef.current = true
-
-    // 延迟初始化，确保水合完成
-    const checkIsMobile = () => {
-      setIsMobile(window.innerWidth < MOBILE_BREAKPOINT)
-    }
-
-    checkIsMobile()
-
-    let timeoutId = null
-    const handleResize = () => {
-      if (timeoutId) clearTimeout(timeoutId)
-      timeoutId = setTimeout(checkIsMobile, 100)
-    }
-
-    window.addEventListener('resize', handleResize)
-    return () => {
-      window.removeEventListener('resize', handleResize)
-      if (timeoutId) clearTimeout(timeoutId)
-    }
-  }, [])
-
-  return isMobile
-}
-
 /**
  * 牌阵预览组件
  *
@@ -87,13 +52,14 @@ export function SpreadPreview() {
   // Store 状态
   const phase = useGameStore((state) => state.phase) || 'PORTAL'
   const previewSpreadIndex = useGameStore((state) => state.previewSpreadIndex) || 0
-  const currentSpreadId = useGameStore((state) => state.currentSpreadId) || 'trinity'
+  const currentSpreadId = useGameStore((state) => state.currentSpreadId) || 'single'
+
+  // 窗口大小判断（与 StarRing 保持一致）
+  const { size } = useThree()
+  const isMobile = size.width < MOBILE_BREAKPOINT
 
   // 组件状态
   const [transitionPhase, setTransitionPhase] = useState(TransitionPhase.IDLE)
-
-  // 稳定的移动端检测
-  const isMobile = useIsMobile()
 
   // Refs - 使用 ref 缓存稳定数据，避免重渲染导致的数据变化
   const prevPreviewIndicesRef = useRef([])
@@ -110,43 +76,36 @@ export function SpreadPreview() {
   const cardCount = spread.cardCount
 
   // 稳定的预览索引和位置 - 使用 ref 缓存，只在牌阵变化时重新生成
-  const stableKey = `${currentSpreadId}-${previewSpreadIndex}-${isMobile}`
+  const stableKey = `${currentSpreadId}-${previewSpreadIndex}`
   if (previewDataRef.current.stableKey !== stableKey) {
     previewDataRef.current = {
       stableKey,
       indices: pickRandomPreviewIndices(cardCount),
-      positions: getPreviewPositions(currentSpreadId, isMobile),
+      positions: getPreviewPositions(currentSpreadId, isMobile, 'preview'),
     }
   }
   const previewIndices = previewDataRef.current.indices
   const previewPositions = previewDataRef.current.positions
 
-  // 组合所有 useEffect 逻辑
-  const effectsTrigger = useMemo(() => ({
-    transitionPhase,
-    previewSpreadIndex,
-    spreadId: currentSpreadId,
-    cardCount,
-  }), [transitionPhase, previewSpreadIndex, currentSpreadId, cardCount])
+  // 快速切换检测和强制重置
+  const prevStableKeyRef = useRef('')
+  useEffect(() => {
+    if (prevStableKeyRef.current && prevStableKeyRef.current !== stableKey) {
+      // 检测到牌阵切换，立即强制进入 ENTERING 阶段
+      prevPreviewIndicesRef.current = []
+      setTransitionPhase(TransitionPhase.ENTERING)
+      prevSpreadRef.current = { id: currentSpreadId, cardCount, stableKey }
+    } else if (!prevStableKeyRef.current) {
+      // 首次渲染，开始 ENTERING
+      setTransitionPhase(TransitionPhase.ENTERING)
+      prevSpreadRef.current = { id: currentSpreadId, cardCount, stableKey }
+    }
+    prevStableKeyRef.current = stableKey
+  }, [stableKey, currentSpreadId, cardCount])
 
   // ========== 第二部分：所有副作用逻辑 ==========
   useEffect(() => {
-    // 触发动画序列
-    const prevSpread = prevSpreadRef.current
-    const isFirstRender = transitionPhase === TransitionPhase.IDLE && prevPreviewIndicesRef.current.length === 0
-
-    if (isFirstRender) {
-      setTransitionPhase(TransitionPhase.ENTERING)
-      prevSpreadRef.current = { id: currentSpreadId, cardCount }
-    } else if (currentSpreadId !== prevSpread?.id || cardCount !== prevSpread?.cardCount) {
-      // 牌阵切换，触发碎裂动画
-      setTransitionPhase(TransitionPhase.BURSTING)
-      prevSpreadRef.current = { id: currentSpreadId, cardCount }
-    }
-  }, [effectsTrigger, currentSpreadId, cardCount])
-
-  useEffect(() => {
-    // 处理碎裂完成
+    // 处理碎裂动画
     if (transitionPhase === TransitionPhase.BURSTING) {
       const timer = setTimeout(() => {
         setTransitionPhase(TransitionPhase.CLEARING)

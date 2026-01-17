@@ -12,7 +12,7 @@ import { getSlotPositions } from '@/constants/spreadConfig'
  */
 export function SpreadSlots() {
   // Store 状态
-  const currentSpreadId = useGameStore((state) => state.currentSpreadId) || 'trinity'
+  const currentSpreadId = useGameStore((state) => state.currentSpreadId) || 'single'
   const filledSlots = useGameStore((state) => state.filledSlots) || {}
   const readingPhase = useGameStore((state) => state.readingPhase) || 'IDLE'
 

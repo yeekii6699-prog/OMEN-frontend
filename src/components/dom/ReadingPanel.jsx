@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useGameStore } from '@/store/gameStore'
 import { TAROT_DATA } from '@/constants/tarotData'
 import { TAROT_QUESTIONS } from '@/constants/tarotQuestions'
+import { getSpreadById } from '@/constants/spreadConfig'
 import { ReadingCaptionBar } from './reading-panel/ReadingCaptionBar'
 import { ReadingConsultationInput } from './reading-panel/ReadingConsultationInput'
 import { ReadingFeedbackModal } from './reading-panel/ReadingFeedbackModal'
@@ -34,7 +35,7 @@ export function ReadingPanel() {
   const cardOrientations = useGameStore((state) => state.cardOrientations) || {}
   const resetGame = useGameStore((state) => state.resetGame) || (() => { })
   const totalSlots = useGameStore((state) => state.totalSlots) || 3
-  const currentSpreadId = useGameStore((state) => state.currentSpreadId) || 'trinity'
+  const currentSpreadId = useGameStore((state) => state.currentSpreadId) || 'single'
   const [visible, setVisible] = useState(false)
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('')
@@ -67,6 +68,9 @@ export function ReadingPanel() {
     return selectedIndices.filter((index) => revealedIndices.includes(index)).slice(0, totalSlots)
   }, [selectedIndices, revealedIndices, totalSlots])
 
+  const spread = useMemo(() => getSpreadById(currentSpreadId), [currentSpreadId])
+  const positionMeanings = spread?.positionMeanings || []
+
   const chosenLabels = useMemo(() => {
     return chosenIndices
       .map((index) => {
@@ -76,6 +80,19 @@ export function ReadingPanel() {
       })
       .filter(Boolean)
   }, [chosenIndices, cardOrientations])
+
+  const cardsForModel = useMemo(() => {
+    if (!chosenLabels.length) return []
+    return chosenLabels.map((label, index) => {
+      const meaning = positionMeanings[index] || `\u4f4d\u7f6e${index + 1}`
+      return `\u724c\u4f4d\uff1a${meaning} | \u5361\u724c\uff1a${label}`
+    })
+  }, [chosenLabels, positionMeanings])
+
+  const cardsForModelText = useMemo(() => {
+    if (!cardsForModel.length) return ''
+    return cardsForModel.map((card, index) => `${index + 1}. ${card}`).join('\n')
+  }, [cardsForModel])
 
   const chosenCardsMeta = useMemo(() => {
     return chosenIndices.map((index, idx) => {
@@ -414,7 +431,7 @@ export function ReadingPanel() {
         },
         body: JSON.stringify({
           question: trimmed,
-          cards: chosenLabels,
+          cards: cardsForModel,
           recordId: recordId || undefined,
         }),
         signal: controller.signal,
@@ -533,7 +550,7 @@ export function ReadingPanel() {
       const messages = [
         {
           role: 'user',
-          content: `问题：${question}\n抽到的牌：${chosenLabels.join('、')}`,
+          content: `问题：${question}\n抽到的牌：\n${cardsForModelText || chosenLabels.join('、')}`,
         },
         {
           role: 'assistant',

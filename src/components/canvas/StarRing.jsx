@@ -144,7 +144,7 @@ export function StarRing() {
   const setCardOrientation = useGameStore((state) => state.setCardOrientation) || (() => {})
   const readingStep = useGameStore((state) => state.readingStep) || 'idle'
   const sessionId = useGameStore((state) => state.sessionId) || 0
-  const currentSpreadId = useGameStore((state) => state.currentSpreadId) || 'trinity'
+  const currentSpreadId = useGameStore((state) => state.currentSpreadId) || 'single'
 
   // 从牌阵配置获取最大选择数量
   const spreadConfig = useMemo(() => getSpreadById(currentSpreadId), [currentSpreadId])
@@ -256,7 +256,7 @@ export function StarRing() {
 
   // 动态计算 ChosenCard 的目标位置
   const shouldCenterChosen = isBurstOrReveal || floatingCards.length >= maxSelected
-  const previewPositions = useMemo(() => getPreviewPositions(currentSpreadId), [currentSpreadId])
+  const previewPositions = useMemo(() => getPreviewPositions(currentSpreadId, isMobile), [currentSpreadId, isMobile])
   const chosenLayout = useMemo(() => {
     const count = floatingCards.length
     if (count === 0) return new Map()

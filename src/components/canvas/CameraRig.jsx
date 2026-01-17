@@ -5,7 +5,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useGameStore } from '@/store/gameStore'
 import { getChosenPositions } from '@/constants/readingLayout'
-import { getSpreadById } from '@/constants/spreadConfig'
+import { getSpreadById, getPreviewCameraZ } from '@/constants/spreadConfig'
 
 /**
  * 摄像机控制组件 - 根据游戏阶段动态调整视角
@@ -13,6 +13,7 @@ import { getSpreadById } from '@/constants/spreadConfig'
  */
 export function CameraRig() {
   const { camera, pointer, size } = useThree()
+  const isMobile = size.width < 768
   const targetRef = useRef(new THREE.Vector3(0, 0, 0))
   const parallaxRef = useRef({ x: 0, y: 0, strength: 0 })
   const focusPosRef = useRef(new THREE.Vector3())
@@ -26,7 +27,6 @@ export function CameraRig() {
     lift: 0,
   })
   const prevStepRef = useRef('idle')
-  const isMobile = size.width < 768
 
   // 兼容性处理：防止 store 未加载时报错
   const phase = useGameStore((state) => state.phase) || 'PORTAL'
@@ -36,8 +36,14 @@ export function CameraRig() {
   const previewSpreadIndex = useGameStore((state) => state.previewSpreadIndex) || 0
   const totalSlots = useGameStore((state) => state.totalSlots) || 3
   const selectedIndices = useGameStore((state) => state.selectedIndices) || []
-  const currentSpreadId = useGameStore((state) => state.currentSpreadId) || 'trinity'
+  const currentSpreadId = useGameStore((state) => state.currentSpreadId) || 'single'
   const prevPreviewIndexRef = useRef(0)
+
+  // 预览位 - 移动端根据牌阵类型固定距离
+  const previewCameraZ = useMemo(() =>
+    getPreviewCameraZ(currentSpreadId, isMobile),
+    [isMobile, currentSpreadId]
+  )
 
   // 判断选牌是否完成
   const currentSpread = useMemo(() => getSpreadById(currentSpreadId), [currentSpreadId])
@@ -67,7 +73,8 @@ export function CameraRig() {
 
   // 摄像机位置定义
   const startPos = new THREE.Vector3(0, isMobile ? 6 : 5, isMobile ? 42 : 35)  // 入口俯视
-  const previewPos = new THREE.Vector3(0, isMobile ? 0 : 0, isMobile ? 20 : 18) // 预览位 - 正对牌阵
+  const previewPos = new THREE.Vector3(0, 0, previewCameraZ)
+
   const deskPos = new THREE.Vector3(0, isMobile ? 0.5 : 0, isMobile ? 26 : 22) // 选牌位
   const ringCenter = new THREE.Vector3(0, isMobile ? -2.6 : -2, 0)
   const sessionLookAt = new THREE.Vector3(0, 0, isMobile ? 16 : 14)

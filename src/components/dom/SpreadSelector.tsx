@@ -22,8 +22,18 @@ export function SpreadSelector() {
   const confirmSpread = useGameStore((state) => state.confirmSpread)
 
   // 使用安全的默认值（确保值稳定）
-  const currentSpreadId = (currentSpreadIdRaw || 'trinity') as SpreadId
-  const availableSpreads = (availableSpreadsRaw || ['trinity', 'hexagram', 'cross']) as SpreadId[]
+  const currentSpreadId = (currentSpreadIdRaw || 'single') as SpreadId
+  const availableSpreads = (availableSpreadsRaw || [
+    'single',
+    'holy-trinity',
+    'timeline',
+    'four-elements',
+    'diamond',
+    'gypsy-cross',
+    'choice',
+    'hexagram',
+    'interview',
+  ]) as SpreadId[]
 
   // 使用 useMemo 避免重新计算 - 必须在条件检查之前声明
   const spread = useMemo(() => getSpreadById(currentSpreadId), [currentSpreadId])
