@@ -21,6 +21,15 @@ const PortalHexagram = dynamic(() => import('@/components/canvas/PortalHexagram'
 const CameraRig = dynamic(() => import('@/components/canvas/CameraRig').then((mod) => mod.CameraRig), {
   ssr: false,
 })
+const SpreadSlots = dynamic(() => import('@/components/canvas/SpreadSlots').then((mod) => mod.SpreadSlots), {
+  ssr: false,
+})
+const SpreadPreview = dynamic(() => import('@/components/canvas/SpreadPreview').then((mod) => mod.default || mod.SpreadPreview), {
+  ssr: false,
+})
+const SpreadSelector = dynamic(() => import('@/components/dom/SpreadSelector').then((mod) => mod.default || mod.SpreadSelector), {
+  ssr: false,
+})
 
 export default function Page() {
   const phase = useGameStore((state) => state.phase)
@@ -239,8 +248,11 @@ export default function Page() {
             <CameraRig />
             <StarRing />
             {isPortal && <PortalHexagram />}
+            <SpreadPreview />
+            <SpreadSlots />
           </Suspense>
         </Canvas>
+        <SpreadSelector />
         <ReadingPanel />
       </div>
 

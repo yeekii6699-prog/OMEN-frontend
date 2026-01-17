@@ -11,8 +11,6 @@ import { ReadingInputPanel } from './reading-panel/ReadingInputPanel'
 import { PANEL_STYLE } from './reading-panel/readingStyles'
 import {
   SECTION_LABELS,
-  READING_STEPS,
-  FOCUS_STEP_INDEX,
   getOrientationLabel,
   formatCardLabel,
   buildPages,
@@ -22,6 +20,8 @@ import {
   stripFollowUpQuestion,
   getSectionContent,
   getNextStep,
+  getFocusStepIndexBySpread,
+  getReadingStepsBySpread,
 } from './reading-panel/readingUtils'
 const READING_ENDPOINT = '/api/reading'
 
@@ -33,6 +33,8 @@ export function ReadingPanel() {
   const setReadingStep = useGameStore((state) => state.setReadingStep) || (() => { })
   const cardOrientations = useGameStore((state) => state.cardOrientations) || {}
   const resetGame = useGameStore((state) => state.resetGame) || (() => { })
+  const totalSlots = useGameStore((state) => state.totalSlots) || 3
+  const currentSpreadId = useGameStore((state) => state.currentSpreadId) || 'trinity'
   const [visible, setVisible] = useState(false)
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('')
@@ -62,8 +64,8 @@ export function ReadingPanel() {
   const autoAdvanceRef = useRef(false)
 
   const chosenIndices = useMemo(() => {
-    return selectedIndices.filter((index) => revealedIndices.includes(index)).slice(0, 3)
-  }, [selectedIndices, revealedIndices])
+    return selectedIndices.filter((index) => revealedIndices.includes(index)).slice(0, totalSlots)
+  }, [selectedIndices, revealedIndices, totalSlots])
 
   const chosenLabels = useMemo(() => {
     return chosenIndices
@@ -87,14 +89,14 @@ export function ReadingPanel() {
   }, [chosenIndices, chosenLabels, cardOrientations])
 
   useEffect(() => {
-    setVisible(readingReady && chosenLabels.length === 3)
-  }, [readingReady, chosenLabels.length])
+    setVisible(readingReady && chosenLabels.length === totalSlots)
+  }, [readingReady, chosenLabels.length, totalSlots])
 
   useEffect(() => {
-    if (!readingReady || chosenLabels.length !== 3) {
+    if (!readingReady || chosenLabels.length !== totalSlots) {
       setReadingStep('idle')
     }
-  }, [readingReady, chosenLabels.length, setReadingStep])
+  }, [readingReady, chosenLabels.length, setReadingStep, totalSlots])
 
   useEffect(() => {
     if (!readingReady) {
@@ -195,7 +197,9 @@ export function ReadingPanel() {
     }
   }, [])
 
-  const focusIndex = FOCUS_STEP_INDEX[readingStep] ?? -1
+  // 动态获取当前牌阵的焦点步骤索引
+  const focusStepIndexMap = useMemo(() => getFocusStepIndexBySpread(currentSpreadId), [currentSpreadId])
+  const focusIndex = focusStepIndexMap[readingStep] ?? -1
   const currentCardLabel = focusIndex >= 0 ? chosenLabels[focusIndex] : ''
   const summaryContent = useMemo(
     () => getSectionContent(pages, SECTION_LABELS[0]) || pages[0]?.content || '',
@@ -373,7 +377,7 @@ export function ReadingPanel() {
       setError('先写下你的问题吧。')
       return
     }
-    if (chosenLabels.length < 3) {
+    if (chosenLabels.length < totalSlots) {
       setError('卡牌还没准备好，再等一下。')
       return
     }
@@ -678,7 +682,8 @@ export function ReadingPanel() {
       }
       return
     }
-    const nextStep = getNextStep(readingStep)
+    const readingSteps = getReadingStepsBySpread(currentSpreadId)
+    const nextStep = getNextStep(readingStep, readingSteps)
     if (nextStep === 'awaiting_user_input') {
       autoAdvanceRef.current = true
     }
@@ -687,9 +692,10 @@ export function ReadingPanel() {
 
   const handlePrevStep = () => {
     if (loading && !isStreaming) return
-    const index = READING_STEPS.indexOf(readingStep)
+    const readingSteps = getReadingStepsBySpread(currentSpreadId)
+    const index = readingSteps.indexOf(readingStep)
     if (index <= 0) return
-    setReadingStep(READING_STEPS[index - 1])
+    setReadingStep(readingSteps[index - 1])
   }
 
   if (!visible) {
@@ -711,7 +717,7 @@ export function ReadingPanel() {
       ? '再算一卦'
       : readingStep === 'summary'
       ? '进入对话'
-      : readingStep === 'focus_card_3'
+      : readingStep === `focus_card_${totalSlots}`
         ? '查看总结'
         : '下一张'
   const canPrev = readingStep !== 'focus_card_1'
@@ -732,7 +738,7 @@ export function ReadingPanel() {
           : '总结'
   const captionStepLabel =
     focusIndex >= 0
-      ? `${focusIndex + 1} / 3`
+      ? `${focusIndex + 1} / ${totalSlots}`
       : readingStep === 'awaiting_user_input'
         ? '追问'
         : readingStep === 'consultation_result'

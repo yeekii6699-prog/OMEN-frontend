@@ -67,6 +67,7 @@ export function PortalHexagram() {
 
   // 兼容性处理：防止 store 还没加载时报错
   const setPhase = useGameStore((state) => state.setPhase) || (() => {})
+  const setReadingPhase = useGameStore((state) => state.setReadingPhase) || (() => {})
   const setPortalHolding = useGameStore((state) => state.setPortalHolding) || (() => {})
   const portalPulseId = useGameStore((state) => state.portalPulseId) || 0
 
@@ -223,6 +224,8 @@ export function PortalHexagram() {
       if (performance.now() >= holdRef.current.warpAt) {
         holdRef.current.warpAt = 0
         setPhase('WARP')
+        // 注意：readingPhase 会在 confirmSpread 时设置为 'DRAWING'
+        // WARP 完成后 CameraRig 会自动将 phase 设置为 'PREVIEW'
       }
     }
 

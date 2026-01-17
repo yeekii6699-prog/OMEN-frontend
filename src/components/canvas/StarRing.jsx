@@ -1,17 +1,17 @@
-﻿'use client'
+'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
 import * as THREE from 'three'
 import { useGameStore } from '@/store/gameStore'
-import { CHOSEN_POSITIONS, getChosenPositions } from '@/constants/readingLayout'
+import { getChosenPositions } from '@/constants/readingLayout'
+import { getSpreadById, getPreviewPositions } from '@/constants/spreadConfig'
 import { TarotCard } from './TarotCard'
 import { CardBurstEffect } from './CardBurstEffect'
 import { RingToInputEffect } from './RingToInputEffect'
 
 const TAROT_CARDS = 78
 const RADIUS = 16
-const MAX_SELECTED = 3
 const MOBILE_BREAKPOINT = 768
 
 const RING_CENTER = [0, -2, 0]
@@ -131,6 +131,8 @@ export function StarRing() {
   const [floatingCards, setFloatingCards] = useState([])
   const [inputStartPositions, setInputStartPositions] = useState([])
   const [inputActive, setInputActive] = useState(false)
+
+  // 从 store 获取状态
   const phase = useGameStore((state) => state.phase) || 'PORTAL'
   const portalHolding = useGameStore((state) => state.portalHolding) || false
   const triggerPortalPulse = useGameStore((state) => state.triggerPortalPulse) || (() => {})
@@ -142,6 +144,12 @@ export function StarRing() {
   const setCardOrientation = useGameStore((state) => state.setCardOrientation) || (() => {})
   const readingStep = useGameStore((state) => state.readingStep) || 'idle'
   const sessionId = useGameStore((state) => state.sessionId) || 0
+  const currentSpreadId = useGameStore((state) => state.currentSpreadId) || 'trinity'
+
+  // 从牌阵配置获取最大选择数量
+  const spreadConfig = useMemo(() => getSpreadById(currentSpreadId), [currentSpreadId])
+  const maxSelected = spreadConfig.cardCount
+
   const sessionRef = useRef(sessionId)
   const reassembleRef = useRef({
     active: false,
@@ -150,12 +158,13 @@ export function StarRing() {
     progress: 1,
     pulsed: false,
   })
+
   const isBurstOrReveal = phase === 'BURST' || phase === 'REVEAL'
   const isReveal = phase === 'REVEAL'
   const isSession = phase === 'SESSION'
-  const canReveal = isReveal || floatingCards.length >= MAX_SELECTED
+  const canReveal = isReveal || floatingCards.length >= maxSelected
   const allChosenRevealed =
-    floatingCards.length >= MAX_SELECTED &&
+    floatingCards.length >= maxSelected &&
     floatingCards.every((card) => revealedIndices.includes(card.key))
   const shouldBurst = isBurstOrReveal || allChosenRevealed
   const isMobile = size.width < MOBILE_BREAKPOINT
@@ -244,21 +253,29 @@ export function StarRing() {
     () => cards.filter((card) => !floatingKeys.has(card.key)),
     [cards, floatingKeys]
   )
-  const shouldCenterChosen = isBurstOrReveal || floatingCards.length >= CHOSEN_POSITIONS.length
+
+  // 动态计算 ChosenCard 的目标位置
+  const shouldCenterChosen = isBurstOrReveal || floatingCards.length >= maxSelected
+  const previewPositions = useMemo(() => getPreviewPositions(currentSpreadId), [currentSpreadId])
   const chosenLayout = useMemo(() => {
     const count = floatingCards.length
     if (count === 0) return new Map()
 
     if (shouldCenterChosen) {
+      // 移动端缩放系数 0.55，适配小屏幕
+      const mobileScale = isMobile ? 0.7 : 1
       return new Map(
-        floatingCards.map((card, index) => [
-          card.key,
-          layout.chosenPositions[index] ||
-            layout.chosenPositions[layout.chosenPositions.length - 1],
-        ])
+        floatingCards.map((card, index) => {
+          const pos = previewPositions[index]?.position
+          return [
+            card.key,
+            pos ? [pos[0] * mobileScale, pos[1] * mobileScale, 12] : [0, 0, 12],
+          ]
+        })
       )
     }
 
+    // 浮动排列模式
     const spacing = (CARD_SIZE.width + FLOATING.gap) * layout.ringScale
     const totalWidth = (count - 1) * spacing
     const startX = -totalWidth / 2
@@ -271,7 +288,7 @@ export function StarRing() {
         [startX + index * spacing, baseY, baseZ],
       ])
     )
-  }, [floatingCards, layout, shouldCenterChosen])
+  }, [floatingCards, layout, shouldCenterChosen, previewPositions])
 
   useEffect(() => {
     if (sessionRef.current !== sessionId) {
@@ -382,25 +399,23 @@ export function StarRing() {
   const handleSelectCard = useCallback(
     (key, worldPosition) => {
       if (shouldBurst || !isSession) return
-      setFloatingCards((current) => {
-        if (current.length >= MAX_SELECTED) return current
-        if (current.some((card) => card.key === key)) return current
+      if (floatingCards.length >= maxSelected) return
+      if (floatingCards.some((card) => card.key === key)) return
 
-        if (!cardOrientations[key]) {
-          setCardOrientation(key, pickOrientation())
-        }
+      if (!cardOrientations[key]) {
+        setCardOrientation(key, pickOrientation())
+      }
 
-        return [
-          ...current,
-          {
-            key,
-            start: [worldPosition.x, worldPosition.y, worldPosition.z],
-          },
-        ]
-      })
+      setFloatingCards((current) => [
+        ...current,
+        {
+          key,
+          start: [worldPosition.x, worldPosition.y, worldPosition.z],
+        },
+      ])
       setHoveredCardKey(null)
     },
-    [shouldBurst, isSession, cardOrientations, setCardOrientation]
+    [shouldBurst, isSession, floatingCards, cardOrientations, setCardOrientation, maxSelected]
   )
 
   const handleRevealCard = useCallback(
@@ -447,7 +462,7 @@ export function StarRing() {
           target={chosenLayout.get(card.key) || card.start}
           cardKey={card.key}
           isRevealed={revealedSet.has(card.key)}
-          isChosen={true} // 选中时就开始加载图片
+          isChosen={true}
           isReversed={cardOrientations[card.key] === 'reversed'}
           canReveal={canReveal}
           onReveal={handleRevealCard}
@@ -457,6 +472,7 @@ export function StarRing() {
       <RingToInputEffect
         active={inputActive}
         startPositions={inputStartPositions}
+        cardCount={maxSelected}
         onComplete={() => setReadingReady(true)}
       />
     </group>
@@ -635,9 +651,11 @@ function ChosenCard({
   const positionRef = useRef(new THREE.Vector3(start[0], start[1], start[2]))
   const targetRef = useRef(new THREE.Vector3(target[0], target[1], target[2]))
   const { camera } = useThree()
+  const hasArrivedRef = useRef(false)
 
   useEffect(() => {
     targetRef.current.set(target[0], target[1], target[2])
+    hasArrivedRef.current = false // 重置到达状态
   }, [target])
 
   useEffect(() => {
@@ -645,11 +663,40 @@ function ChosenCard({
     groupRef.current.scale.setScalar(chosenScale)
   }, [chosenScale])
 
-  useFrame(() => {
+  useFrame((_state, delta) => {
     const group = groupRef.current
     if (!group) return
 
-    positionRef.current.lerp(targetRef.current, FLOATING.lerp)
+    // 如果已到达目标，直接同步位置和朝向
+    if (hasArrivedRef.current) {
+      group.position.copy(targetRef.current)
+      group.quaternion.copy(camera.quaternion)
+      return
+    }
+
+    // 简单的线性插值移动，固定速度
+    const currentPos = positionRef.current
+    const targetPos = targetRef.current
+    const dx = targetPos.x - currentPos.x
+    const dy = targetPos.y - currentPos.y
+    const dz = targetPos.z - currentPos.z
+    const distance = Math.sqrt(dx * dx + dy * dy + dz * dz)
+
+    // 移动速度
+    const speed = 12 * delta
+
+    if (distance < speed) {
+      // 到达目标
+      positionRef.current.copy(targetPos)
+      hasArrivedRef.current = true
+    } else {
+      // 向目标移动
+      const t = speed / distance
+      positionRef.current.x += dx * t
+      positionRef.current.y += dy * t
+      positionRef.current.z += dz * t
+    }
+
     group.position.copy(positionRef.current)
     group.quaternion.copy(camera.quaternion)
   })

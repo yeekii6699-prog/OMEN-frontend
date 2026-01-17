@@ -1,17 +1,47 @@
-export const SECTION_LABELS = ['总体解读', '单牌解读', '行动建议']
-export const READING_STEPS = [
-  'focus_card_1',
-  'focus_card_2',
-  'focus_card_3',
-  'summary',
-  'awaiting_user_input',
-  'consultation_result',
-]
-export const FOCUS_STEP_INDEX = {
-  focus_card_1: 0,
-  focus_card_2: 1,
-  focus_card_3: 2,
+import { getSpreadById } from '@/constants/spreadConfig'
+
+// ============================================
+// 动态阅读步骤生成器
+// ============================================
+
+/**
+ * 生成阅读步骤数组（根据牌阵卡牌数量动态生成）
+ * @param {number} cardCount - 卡牌数量
+ * @returns {string[]} 阅读步骤数组
+ */
+export const generateReadingSteps = (cardCount = 3) => {
+  const steps = []
+  for (let i = 1; i <= cardCount; i++) {
+    steps.push(`focus_card_${i}`)
+  }
+  steps.push('summary')
+  steps.push('awaiting_user_input')
+  steps.push('consultation_result')
+  return steps
 }
+
+/**
+ * 生成焦点步骤索引映射
+ * @param {number} cardCount - 卡牌数量
+ * @returns {Object} 步骤到索引的映射
+ */
+export const generateFocusStepIndex = (cardCount = 3) => {
+  const indexMap = {}
+  for (let i = 1; i <= cardCount; i++) {
+    indexMap[`focus_card_${i}`] = i - 1
+  }
+  return indexMap
+}
+
+// 默认步骤（3张牌）
+export const READING_STEPS = generateReadingSteps(3)
+export const FOCUS_STEP_INDEX = generateFocusStepIndex(3)
+
+// ============================================
+// 工具函数
+// ============================================
+
+export const SECTION_LABELS = ['总体解读', '单牌解读', '行动建议']
 
 export const getOrientationLabel = (orientation) => (orientation === 'reversed' ? '逆位' : '正位')
 
@@ -110,10 +140,30 @@ export const getSectionContent = (pages, label) => {
   return match ? match.content : ''
 }
 
-export const getNextStep = (step) => {
-  const index = READING_STEPS.indexOf(step)
-  if (index === -1) return 'focus_card_1'
-  return READING_STEPS[index + 1] || 'idle'
+export const getNextStep = (step, readingSteps = READING_STEPS) => {
+  const index = readingSteps.indexOf(step)
+  if (index === -1) return readingSteps[0] || 'focus_card_1'
+  return readingSteps[index + 1] || 'idle'
+}
+
+/**
+ * 根据牌阵ID获取阅读步骤
+ * @param {string} spreadId - 牌阵ID
+ * @returns {string[]} 阅读步骤数组
+ */
+export const getReadingStepsBySpread = (spreadId) => {
+  const spread = getSpreadById(spreadId)
+  return generateReadingSteps(spread.cardCount)
+}
+
+/**
+ * 根据牌阵ID获取焦点步骤索引映射
+ * @param {string} spreadId - 牌阵ID
+ * @returns {Object} 步骤到索引的映射
+ */
+export const getFocusStepIndexBySpread = (spreadId) => {
+  const spread = getSpreadById(spreadId)
+  return generateFocusStepIndex(spread.cardCount)
 }
 
 export const extractFollowUpQuestion = (text) => {
@@ -153,7 +203,7 @@ export const splitSingleCardContent = (text, cardsMeta) => {
     let content = String(value || '').trim()
     content = content.replace(/^\\s*(\\*\\*|__)\\s*/, '')
     content = content.replace(
-      /^\\s*(?:\\*\\*\\s*)?(?:第\\s*)?([1-3]|一|二|三)\\s*(?:张|牌)?\\s*[).、:：·.\\uFF0E-]\\s*(?:\\*\\*)?\\s*/m,
+      /^\\s*(?:\\*\\*\\s*)?(?:第\\s*)?([1-9]|一|二|三|四|五|六|七|八|九)\\s*(?:张|牌)?\\s*[).、:：·.\\uFF0E-]\\s*(?:\\*\\*)?\\s*/m,
       ''
     )
     content = content.replace(/(\\*\\*|__)\\s*$/g, '')
@@ -201,8 +251,9 @@ export const splitSingleCardContent = (text, cardsMeta) => {
     if (!name) return null
     const escapedName = escapeRegex(name)
     const escapedOrientation = orientation ? escapeRegex(orientation) : ''
+    // 支持 1-9 和 一-九 的中文数字
     const numberPrefix =
-      '(?:(?:第\\s*(?:[1-3]|一|二|三)\\s*(?:张|牌)?\\s*(?:[).、:：·.\\uFF0E-]\\s*)?)|(?:[1-3]|一|二|三)\\s*(?:张|牌)?\\s*(?:[).、:：·.\\uFF0E-]\\s*))?'
+      '(?:(?:第\\s*(?:[1-9]|一|二|三|四|五|六|七|八|九)\\s*(?:张|牌)?\\s*(?:[).、:：·.\\uFF0E-]\\s*)?)|(?:[1-9]|一|二|三|四|五|六|七|八|九)\\s*(?:张|牌)?\\s*(?:[).、:：·.\\uFF0E-]\\s*))?'
     const tail = '\\s*(?:[:：-]\\s*)?(?:\\*\\*)?'
     const patterns = [
       escapedOrientation
@@ -225,14 +276,14 @@ export const splitSingleCardContent = (text, cardsMeta) => {
   const cardMarkers = cardsMeta.map((card, index) => buildCardMarker(card, index)).filter(Boolean)
   const mapChineseNumber = (value) => {
     if (!value) return null
-    if (value === '一') return 1
-    if (value === '二') return 2
-    if (value === '三') return 3
-    return null
+    const map = {
+      '一': 1, '二': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9
+    }
+    return map[value] || null
   }
 
   const numberedRegex =
-    /(^|\\n)\\s*(?:\\*\\*\\s*)?(?:第\\s*)?([1-3]|一|二|三)\\s*(?:张|牌)?\\s*(?:[).、:：·.\\uFF0E-]|$)\\s*(?:\\*\\*)?/g
+    /(^|\\n)\\s*(?:\\*\\*\\s*)?(?:第\\s*)?([1-9]|一|二|三|四|五|六|七|八|九)\\s*(?:张|牌)?\\s*(?:[).、:：·.\\uFF0E-]|$)\\s*(?:\\*\\*)?/g
   const numberedMarkers = []
   let numberedMatch = numberedRegex.exec(text)
   while (numberedMatch) {
