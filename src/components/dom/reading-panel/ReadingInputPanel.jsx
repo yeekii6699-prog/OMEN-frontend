@@ -6,7 +6,7 @@ export function ReadingInputPanel({
   question,
   onQuestionChange,
   onQuestionKeyDown,
-  onReset,
+  onRandomQuestion,
   onSubmit,
   loading,
   error,
@@ -23,26 +23,28 @@ export function ReadingInputPanel({
             </span>
           ))}
         </div>
-        <textarea
-          placeholder="写下你的问题，比如：这段关系接下来会如何发展？"
-          value={question}
-          onChange={onQuestionChange}
-          onKeyDown={onQuestionKeyDown}
-          style={PANEL_STYLE.input}
-        />
-        <div style={PANEL_STYLE.actions}>
+        <div style={PANEL_STYLE.inputRow}>
+          <textarea
+            placeholder="写下你的问题，比如：这段关系接下来会如何发展？"
+            value={question}
+            onChange={onQuestionChange}
+            onKeyDown={onQuestionKeyDown}
+            style={PANEL_STYLE.input}
+          />
           <button
             type="button"
             style={{
-              ...PANEL_STYLE.secondaryButton,
+              ...PANEL_STYLE.swapButton,
               opacity: loading ? 0.7 : 1,
               cursor: loading ? 'not-allowed' : 'pointer',
             }}
-            onClick={onReset}
+            onClick={onRandomQuestion}
             disabled={loading}
           >
-            再算一卦
+            换一个
           </button>
+        </div>
+        <div style={PANEL_STYLE.actions}>
           <button
             type="button"
             style={{

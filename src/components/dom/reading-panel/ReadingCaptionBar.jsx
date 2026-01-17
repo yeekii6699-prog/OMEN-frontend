@@ -1,6 +1,37 @@
 import ReactMarkdown from 'react-markdown'
 import { PANEL_STYLE, markdownComponents } from './readingStyles'
 
+const normalizeMarkdown = (text) => {
+  if (!text) return ''
+  let normalized = text
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u200B\uFEFF]/g, '')
+    .replace(/\u00A0/g, ' ')
+    .replace(/[\uFF0A\uFE61\u2217]/g, '*')
+    .replace(/\uFF3F/g, '_')
+    .replace(/\uFF03/g, '#')
+    .replace(/\\([*_#])/g, '$1')
+    .replace(/\*\*\s+([^*]+?)\s+\*\*/g, '**$1**')
+    .replace(/__\s+([^_]+?)\s+__/g, '__$1__')
+
+  const lines = normalized.split('\n')
+  const nonEmptyLines = lines.filter((line) => line.trim())
+  const indents = nonEmptyLines
+    .map((line) => line.match(/^[ \t]+/)?.[0] ?? '')
+    .filter(Boolean)
+  if (indents.length) {
+    const minIndent = Math.min(
+      ...indents.map((indent) => indent.replace(/\t/g, '    ').length)
+    )
+    if (minIndent >= 4) {
+      const indentRegex = new RegExp(`^[ \\t]{${minIndent}}`)
+      normalized = lines.map((line) => line.replace(indentRegex, '')).join('\n')
+    }
+  }
+
+  return normalized
+}
+
 export function ReadingCaptionBar({
   wrapperStyle,
   title,
@@ -18,9 +49,11 @@ export function ReadingCaptionBar({
   nextLabel,
   showControls = true,
   showNext = true,
+  extraAction,
 }) {
   const prevDisabled = !canPrev || isPrevDisabled
   const nextDisabled = typeof isNextDisabled === 'boolean' ? isNextDisabled : isStepDisabled
+  const normalizedBody = typeof body === 'string' ? normalizeMarkdown(body) : body
 
   return (
     <div style={wrapperStyle}>
@@ -32,8 +65,8 @@ export function ReadingCaptionBar({
         <div style={PANEL_STYLE.captionBody}>
           {isLoading ? (
             loadingNode
-          ) : body ? (
-            <ReactMarkdown components={markdownComponents}>{body}</ReactMarkdown>
+          ) : normalizedBody ? (
+            <ReactMarkdown components={markdownComponents}>{normalizedBody}</ReactMarkdown>
           ) : (
             <span>{placeholder}</span>
           )}
@@ -69,6 +102,9 @@ export function ReadingCaptionBar({
               </button>
             )}
           </div>
+        )}
+        {extraAction && (
+          <div style={{ marginTop: '8px', display: 'flex' }}>{extraAction}</div>
         )}
       </div>
     </div>

@@ -19,7 +19,7 @@ const SYSTEM_PROMPT = [
 ].join('\n')
 
 const CONSULTATION_PROMPT = [
-  '你是一位专业而温柔的咨询师，擅长把塔罗解读转化为可落地的安抚与建议。',
+  '你是一位专业而温柔的占卜师，擅长把塔罗解读转化为可落地的安抚与建议。',
   '请结合先前的牌面解读与用户的新回答，给出最终的建议或治愈性话语。',
   '不要重新解读三张牌，不要输出标题或列表。',
   '控制在 2-4 段内，语气温和、具体、有边界感。',
@@ -44,7 +44,7 @@ const getLastUserMessage = (
 const formatDeepContent = (reply: string, response: string) => {
   const blocks = []
   if (reply) blocks.push(`用户回答：${reply}`)
-  if (response) blocks.push(`咨询师回声：${response}`)
+  if (response) blocks.push(`占卜师回声：${response}`)
   return blocks.join('\n\n')
 }
 
@@ -81,12 +81,12 @@ export async function POST(request: Request) {
     const requestMessages = isConsultation
       ? [{ role: 'system', content: CONSULTATION_PROMPT }, ...messages]
       : [
-          { role: 'system', content: SYSTEM_PROMPT },
-          {
-            role: 'user',
-            content: `问题：${question}\n抽到的牌：${cards.join('、')}`,
-          },
-        ]
+        { role: 'system', content: SYSTEM_PROMPT },
+        {
+          role: 'user',
+          content: `问题：${question}\n抽到的牌：${cards.join('、')}`,
+        },
+      ]
 
     const response = await fetch(API_URL, {
       method: 'POST',
@@ -162,7 +162,7 @@ export async function POST(request: Request) {
           isClosed = true
           try {
             controller.close()
-          } catch (error) {}
+          } catch (error) { }
           finalize()
         }
 

@@ -46,7 +46,7 @@ const PORTAL_SPIN = {
 }
 
 const REASSEMBLE = {
-  duration: 1.7,
+  duration: 3.4,
   minRadius: 3.4,
   maxRadius: 7.2,
   minLift: -1.6,
@@ -173,7 +173,7 @@ export function StarRing() {
     if (reassemble.active) {
       if (reassemble.start === 0) {
         reassemble.start = _state.clock.elapsedTime
-        reassemble.duration = isMobile ? REASSEMBLE.duration - 0.2 : REASSEMBLE.duration
+        reassemble.duration = isMobile ? REASSEMBLE.duration - 0.4 : REASSEMBLE.duration
       }
       const elapsed = _state.clock.elapsedTime - reassemble.start
       const progress = clamp01(elapsed / reassemble.duration)

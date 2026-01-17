@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useGameStore } from '@/store/gameStore'
 import { TAROT_DATA } from '@/constants/tarotData'
+import { TAROT_QUESTIONS } from '@/constants/tarotQuestions'
 import { ReadingCaptionBar } from './reading-panel/ReadingCaptionBar'
 import { ReadingConsultationInput } from './reading-panel/ReadingConsultationInput'
 import { ReadingFeedbackModal } from './reading-panel/ReadingFeedbackModal'
@@ -29,9 +30,9 @@ export function ReadingPanel() {
   const selectedIndices = useGameStore((state) => state.selectedIndices) || []
   const readingReady = useGameStore((state) => state.readingReady) || false
   const readingStep = useGameStore((state) => state.readingStep) || 'idle'
-  const setReadingStep = useGameStore((state) => state.setReadingStep) || (() => {})
+  const setReadingStep = useGameStore((state) => state.setReadingStep) || (() => { })
   const cardOrientations = useGameStore((state) => state.cardOrientations) || {}
-  const resetGame = useGameStore((state) => state.resetGame) || (() => {})
+  const resetGame = useGameStore((state) => state.resetGame) || (() => { })
   const [visible, setVisible] = useState(false)
   const [question, setQuestion] = useState('')
   const [answer, setAnswer] = useState('')
@@ -49,6 +50,7 @@ export function ReadingPanel() {
   const [consultationError, setConsultationError] = useState('')
   const [consultationLoading, setConsultationLoading] = useState(false)
   const [consultationStreaming, setConsultationStreaming] = useState(false)
+  const [feedbackForRestart, setFeedbackForRestart] = useState(false)
   const streamControllerRef = useRef(null)
   const streamBufferRef = useRef('')
   const streamFrameRef = useRef(null)
@@ -139,6 +141,12 @@ export function ReadingPanel() {
       setShowFeedback(false)
       return
     }
+    if (feedbackForRestart) {
+      if (!showFeedback) {
+        setShowFeedback(true)
+      }
+      return
+    }
     if (
       readingStep === 'consultation_result' &&
       !consultationStreaming &&
@@ -155,6 +163,7 @@ export function ReadingPanel() {
     answer,
     consultationAnswer,
     consultationStreaming,
+    feedbackForRestart,
     feedbackStatus,
     isStreaming,
     readingStep,
@@ -379,6 +388,7 @@ export function ReadingPanel() {
     setAnswer('')
     setPages([])
     setShowFeedback(false)
+    setFeedbackForRestart(false)
     setFeedbackScore(0)
     setFeedbackQuickOption(null)
     setFeedbackText('')
@@ -388,7 +398,7 @@ export function ReadingPanel() {
       let recordId = ''
       try {
         recordId = localStorage.getItem('omen_visit_id') || ''
-      } catch (err) {}
+      } catch (err) { }
 
       const controller = new AbortController()
       streamControllerRef.current = controller
@@ -452,16 +462,29 @@ export function ReadingPanel() {
     resetConsultationState()
     autoAdvanceRef.current = false
     resetGame()
-    setReadingStep('idle')
     setQuestion('')
     setAnswer('')
+    setConsultationAnswer('')
     setError('')
     setPages([])
     setShowFeedback(false)
+    setFeedbackForRestart(false)
     setFeedbackScore(0)
     setFeedbackQuickOption(null)
     setFeedbackText('')
     setFeedbackStatus('idle')
+  }
+
+  const handleRandomQuestion = () => {
+    if (!TAROT_QUESTIONS.length) return
+    let nextQuestion = TAROT_QUESTIONS[Math.floor(Math.random() * TAROT_QUESTIONS.length)]
+    if (TAROT_QUESTIONS.length > 1) {
+      while (nextQuestion === question) {
+        nextQuestion = TAROT_QUESTIONS[Math.floor(Math.random() * TAROT_QUESTIONS.length)]
+      }
+    }
+    setQuestion(nextQuestion)
+    setError('')
   }
 
   const handleKeyDown = (event) => {
@@ -487,7 +510,7 @@ export function ReadingPanel() {
     let recordId = ''
     try {
       recordId = localStorage.getItem('omen_visit_id') || ''
-    } catch (err) {}
+    } catch (err) { }
 
     setConsultationError('')
     setConsultationAnswer('')
@@ -595,37 +618,61 @@ export function ReadingPanel() {
     let recordId = ''
     try {
       recordId = localStorage.getItem('omen_visit_id') || ''
-    } catch (err) {}
+    } catch (err) { }
 
-    // 立即关闭弹窗，后台静默提交
+    // 如果是再算一卦的反馈，提交后执行重置
+    const isRestart = feedbackForRestart
+
+    // 立即关闭弹窗
     setShowFeedback(false)
     setFeedbackStatus('success')
+    setFeedbackForRestart(false)
 
-    // 后台静默提交
+    // 如果是再算一卦，立即重置游戏（不等待反馈请求完成）
+    if (isRestart) {
+      setTimeout(() => {
+        handleReset()
+      }, 50)
+    }
+
+    // 后台静默提交反馈
     fetch('/api/feishu/feedback', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         score: feedbackScore || null,
-        quickOption: feedbackQuickOption, // 快速按钮选择
+        quickOption: feedbackQuickOption,
         feedback: feedbackText.trim(),
         recordId: recordId || undefined,
       }),
     }).catch((err) => {
-      // 静默处理失败，不影响用户体验
       console.log('反馈提交失败:', err)
     })
+  }
+
+  const handleRestart = () => {
+    // 重置反馈状态，弹出反馈窗口
+    setFeedbackScore(0)
+    setFeedbackQuickOption(null)
+    setFeedbackText('')
+    setFeedbackStatus('idle')
+    setFeedbackForRestart(true)
+    setShowFeedback(true)
   }
 
   const handleNextStep = () => {
     if (loading && !isStreaming) return
     if (readingStep === 'consultation_result' && consultationStreaming) return
     if (readingStep === 'consultation_result') {
-      handleReset()
+      if (feedbackStatus === 'success') {
+        handleReset()
+      } else {
+        handleRestart()
+      }
       return
     }
     if (readingStep === 'awaiting_user_input') {
-      // 点击"下一张"直接进入咨询师回声
+      // 点击"下一张"直接进入占卜师回声
       if (consultationAnswer) {
         setReadingStep('consultation_result')
       }
@@ -663,12 +710,12 @@ export function ReadingPanel() {
     readingStep === 'consultation_result'
       ? '再算一卦'
       : readingStep === 'summary'
-        ? '进入对话'
-        : readingStep === 'focus_card_3'
-          ? '查看总结'
-          : '下一张'
+      ? '进入对话'
+      : readingStep === 'focus_card_3'
+        ? '查看总结'
+        : '下一张'
   const canPrev = readingStep !== 'focus_card_1'
-  const showNextButton = true // 始终显示下一张按钮，支持从深度追问返回咨询师回声
+  const showNextButton = true // 始终显示下一张按钮，支持从深度追问返回占卜师回声
   const isNextDisabled =
     readingStep === 'consultation_result'
       ? consultationStreaming
@@ -681,7 +728,7 @@ export function ReadingPanel() {
       : readingStep === 'awaiting_user_input'
         ? '深度追问'
         : readingStep === 'consultation_result'
-          ? '咨询师回声'
+          ? '占卜师回声'
           : '总结'
   const captionStepLabel =
     focusIndex >= 0
@@ -700,6 +747,7 @@ export function ReadingPanel() {
     readingStep === 'awaiting_user_input' ||
     readingStep === 'consultation_result'
   const captionDisplayText = isStreaming ? streamingCaptionText : captionText
+  const isRestartDisabled = loading || isStreaming
   const isCaptionLoading =
     readingStep === 'consultation_result'
       ? consultationStreaming && !captionDisplayText
@@ -709,7 +757,7 @@ export function ReadingPanel() {
       ? '总结生成中…'
       : '该牌解读生成中…'
     : readingStep === 'consultation_result'
-      ? '咨询师回应生成中…'
+      ? '占卜师回应生成中…'
       : '解读整理中…'
   const isFeedbackSuccess = feedbackStatus === 'success'
   const feedbackButtonLabel = isFeedbackSuccess ? '已提交' : '提交反馈'
@@ -725,7 +773,7 @@ export function ReadingPanel() {
 
   const ConsultationLoading = () => (
     <span style={{ animation: 'textFadeIn 0.8s ease-in-out infinite alternate' }}>
-      思考中<span style={{ animationDelay: '0.3s' }}>。</span>
+      推演中<span style={{ animationDelay: '0.3s' }}>。</span>
       <span style={{ animationDelay: '0.6s' }}>。</span>
       <span style={{ animationDelay: '0.9s' }}>。</span>
     </span>
@@ -777,7 +825,7 @@ export function ReadingPanel() {
           question={question}
           onQuestionChange={(event) => setQuestion(event.target.value)}
           onQuestionKeyDown={handleKeyDown}
-          onReset={handleReset}
+          onRandomQuestion={handleRandomQuestion}
           onSubmit={handleSubmit}
           loading={loading}
           error={error}
@@ -802,6 +850,23 @@ export function ReadingPanel() {
           nextLabel={nextLabel}
           showControls={showCaptionControls}
           showNext={showNextButton}
+          extraAction={
+            readingStep === 'summary' ? (
+              <button
+                type="button"
+                style={{
+                  ...PANEL_STYLE.secondaryButton,
+                  width: '100%',
+                  opacity: isRestartDisabled ? 0.7 : 1,
+                  cursor: isRestartDisabled ? 'not-allowed' : 'pointer',
+                }}
+                onClick={handleRestart}
+                disabled={isRestartDisabled}
+              >
+                再算一卦
+              </button>
+            ) : null
+          }
         />
       )}
 

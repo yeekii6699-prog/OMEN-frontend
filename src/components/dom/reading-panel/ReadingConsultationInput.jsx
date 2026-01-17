@@ -10,6 +10,7 @@ export function ReadingConsultationInput({
   error,
   sendLabel,
   loadingNode,
+  onRestart,
 }) {
   return (
     <div style={wrapperStyle}>
@@ -36,6 +37,22 @@ export function ReadingConsultationInput({
           {isLoading ? loadingNode || sendLabel : sendLabel}
         </button>
       </div>
+      {onRestart && (
+        <button
+          type="button"
+          style={{
+            ...PANEL_STYLE.secondaryButton,
+            width: '100%',
+            marginTop: '8px',
+            opacity: isLoading ? 0.7 : 1,
+            cursor: isLoading ? 'not-allowed' : 'pointer',
+          }}
+          onClick={onRestart}
+          disabled={isLoading}
+        >
+          再算一卦
+        </button>
+      )}
       {error && <div style={PANEL_STYLE.error}>{error}</div>}
     </div>
   )

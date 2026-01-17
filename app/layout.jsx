@@ -2,7 +2,7 @@ import { Layout } from '@/components/dom/Layout'
 import '@/global.css'
 
 export const metadata = {
-  title: 'OMEN塔罗',
+  title: 'yeekii塔罗',
   description: '神秘而温暖的塔罗体验',
 }
 
@@ -10,7 +10,7 @@ export default function RootLayout({ children }) {
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'WebSite',
-    name: 'OMEN塔罗',
+    name: 'yeekii塔罗',
     url: 'https://omen-tarot.vercel.app/',
     description: '神秘而温暖的塔罗体验',
     keywords: '塔罗,塔罗牌,塔罗占卜,塔罗解读,免费塔罗,在线塔罗',
