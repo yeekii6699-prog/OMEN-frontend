@@ -16,6 +16,10 @@ export type GamePhase =
   | 'BURST'    // 结算前的坍缩动画
   | 'REVEAL'   // 最终结果页
 
+/**
+ * @deprecated 已废弃 - 旧的解读步骤类型
+ * 现在使用 CollapsibleChat 组件进行连续对话，不再需要分步解读
+ */
 export type ReadingStep =
   | 'idle'
   | 'focus_card_1'
@@ -117,12 +121,16 @@ interface GameState {
   readingStep: ReadingStep
   /** 轮次标识，用于触发前端重置 */
   sessionId: number
+  /** 用户问题 */
+  question: string
 
   // ---------- Actions ----------
   /** 切换游戏阶段 */
   setPhase: (phase: GamePhase) => void
   /** 添加对话记录 (用户消息必须附带 metrics) */
   addMessage: (message: ChatTurn) => void
+  /** 设置用户问题 */
+  setQuestion: (question: string) => void
   /** 标记翻开卡牌 */
   revealCard: (index: number) => void
   /** 设置已选中的卡牌 */
@@ -200,6 +208,7 @@ const initialState = {
   readingReady: false,
   readingStep: 'idle' as ReadingStep,
   sessionId: 0,
+  question: '',
 }
 
 /**
@@ -226,6 +235,8 @@ export const useGameStore = create<GameState>((set) => ({
       // 用户发送消息后清空临时犹豫状态
       currentHesitation: message.role === 'user' ? null : state.currentHesitation,
     })),
+
+  setQuestion: (question) => set({ question }),
 
   revealCard: (index) =>
     set((state) =>
@@ -259,6 +270,7 @@ export const useGameStore = create<GameState>((set) => ({
     set((state) => ({
       ...initialState,
       sessionId: state.sessionId + 1,
+      question: '',
     })),
 
   setReadingPhase: (readingPhase) => set({ readingPhase }),

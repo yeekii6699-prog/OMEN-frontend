@@ -23,8 +23,8 @@ function useBackTexture() {
           texture.colorSpace = THREE.SRGBColorSpace
         },
         undefined,
-        (error) => {
-          console.warn('[texture] Failed to load card back.', error)
+        () => {
+          // 纹理加载失败，静默处理
         }
       )
     }
@@ -70,7 +70,9 @@ export const TarotCard = forwardRef(function TarotCard(
           setFrontTexture(texture)
         },
         undefined,
-        (err) => console.warn('Failed to load texture:', tarot.image, err)
+        () => {
+          // 纹理加载失败，静默处理
+        }
       )
     }
   }, [isChosen, tarot.image, frontTexture])

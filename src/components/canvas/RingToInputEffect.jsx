@@ -76,8 +76,8 @@ const useShardTexture = () => {
           loaded.colorSpace = THREE.SRGBColorSpace
         },
         undefined,
-        (error) => {
-          console.warn('[texture] Failed to load shard texture.', error)
+        () => {
+          // 纹理加载失败，静默处理
         }
       )
     }

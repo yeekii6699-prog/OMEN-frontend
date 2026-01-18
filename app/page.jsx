@@ -4,7 +4,7 @@ import dynamic from 'next/dynamic'
 import { Canvas } from '@react-three/fiber'
 import { Suspense, useEffect } from 'react'
 import { useGameStore } from '@/store/gameStore'
-import { ReadingPanel } from '@/components/dom/ReadingPanel'
+import { CollapsibleChat } from '@/components/dom/CollapsibleChat'
 
 const LOCATION_STORAGE_KEY = 'omen_location_v1'
 const VISIT_RETRY_LIMIT = 3
@@ -253,11 +253,11 @@ export default function Page() {
           </Suspense>
         </Canvas>
         <SpreadSelector />
-        <ReadingPanel />
+        <CollapsibleChat />
       </div>
 
       {isPortal && (
-        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 text-center text-purple-300/60 text-sm select-none">
+        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 text-center text-sm text-purple-300/60 select-none">
           <p>长按阵法，默念你的问题</p>
         </div>
       )}

@@ -396,24 +396,43 @@ export function StarRing() {
     setHoveredCardKey((current) => (current === key ? null : current))
   }, [])
 
+  const processedSelectionsRef = useRef(new Set())
+
   const handleSelectCard = useCallback(
     (key, worldPosition) => {
       if (shouldBurst || !isSession) return
       if (floatingCards.length >= maxSelected) return
-      if (floatingCards.some((card) => card.key === key)) return
+
+      // 防止快速点击导致重复处理同一张卡
+      if (processedSelectionsRef.current.has(key)) return
+
+      // 验证 worldPosition 有效性
+      if (!worldPosition || typeof worldPosition.x !== 'number' || isNaN(worldPosition.x)) return
+
+      processedSelectionsRef.current.add(key)
 
       if (!cardOrientations[key]) {
         setCardOrientation(key, pickOrientation())
       }
 
-      setFloatingCards((current) => [
-        ...current,
-        {
+      setFloatingCards((current) => {
+        // 再次检查防止重复（防御性编程）
+        if (current.some((card) => card.key === key)) {
+          processedSelectionsRef.current.delete(key)
+          return current
+        }
+        const newCard = {
           key,
           start: [worldPosition.x, worldPosition.y, worldPosition.z],
-        },
-      ])
+        }
+        return [...current, newCard]
+      })
       setHoveredCardKey(null)
+
+      // 清除处理标记（延迟确保状态已更新）
+      setTimeout(() => {
+        processedSelectionsRef.current.delete(key)
+      }, 100)
     },
     [shouldBurst, isSession, floatingCards, cardOrientations, setCardOrientation, maxSelected]
   )
@@ -653,9 +672,39 @@ function ChosenCard({
   const { camera } = useThree()
   const hasArrivedRef = useRef(false)
 
+  // 确保 positionRef 始终与 start 同步（处理快速点击时 start 可能未就绪的情况）
   useEffect(() => {
-    targetRef.current.set(target[0], target[1], target[2])
-    hasArrivedRef.current = false // 重置到达状态
+    const startValid = Array.isArray(start) && start.length === 3 && start.every(v => !isNaN(v))
+    if (startValid) {
+      positionRef.current.set(start[0], start[1], start[2])
+    }
+  }, [start])
+
+  // 确保 targetRef 始终与 target 同步（首次初始化）
+  useEffect(() => {
+    const targetValid = Array.isArray(target) && target.length === 3 && target.every(v => !isNaN(v))
+    if (targetValid) {
+      targetRef.current.set(target[0], target[1], target[2])
+      hasArrivedRef.current = false
+    }
+  }, [target])
+
+  useEffect(() => {
+    // 只有当卡牌已到达当前位置且目标位置显著变化时，才更新目标
+    const currentTarget = targetRef.current
+    const targetValid = Array.isArray(target) && target.length === 3 && target.every(v => !isNaN(v))
+    if (!targetValid) return
+
+    const dist = Math.sqrt(
+      Math.pow(target[0] - currentTarget.x, 2) +
+      Math.pow(target[1] - currentTarget.y, 2) +
+      Math.pow(target[2] - currentTarget.z, 2)
+    )
+    // 只有目标位置显著变化时才更新，避免动画抖动
+    if (dist > 0.01) {
+      targetRef.current.set(target[0], target[1], target[2])
+      hasArrivedRef.current = false
+    }
   }, [target])
 
   useEffect(() => {
@@ -667,14 +716,7 @@ function ChosenCard({
     const group = groupRef.current
     if (!group) return
 
-    // 如果已到达目标，直接同步位置和朝向
-    if (hasArrivedRef.current) {
-      group.position.copy(targetRef.current)
-      group.quaternion.copy(camera.quaternion)
-      return
-    }
-
-    // 简单的线性插值移动，固定速度
+    // 始终从当前位置平滑过渡到目标
     const currentPos = positionRef.current
     const targetPos = targetRef.current
     const dx = targetPos.x - currentPos.x
@@ -683,18 +725,19 @@ function ChosenCard({
     const distance = Math.sqrt(dx * dx + dy * dy + dz * dz)
 
     // 移动速度
-    const speed = 12 * delta
+    const speed = 10 * delta
 
-    if (distance < speed) {
+    if (distance < speed || distance < 0.1) {
       // 到达目标
       positionRef.current.copy(targetPos)
       hasArrivedRef.current = true
     } else {
-      // 向目标移动
-      const t = speed / distance
+      // 向目标移动，使用平滑插值
+      const t = speed / Math.max(distance, speed)
       positionRef.current.x += dx * t
       positionRef.current.y += dy * t
       positionRef.current.z += dz * t
+      hasArrivedRef.current = false
     }
 
     group.position.copy(positionRef.current)

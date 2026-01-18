@@ -75,7 +75,7 @@ export async function POST(request: Request) {
     const isConsultation = messages.length > 0
     const consultationReply = isConsultation ? getLastUserMessage(messages) : ''
 
-    if (!isConsultation && (!question || cards.length < 3)) {
+    if (!isConsultation && (!question || cards.length < 1)) {
       return NextResponse.json({ error: '问题或卡牌信息不完整。' }, { status: 400 })
     }
 

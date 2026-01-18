@@ -4,7 +4,6 @@ import { useEffect, useCallback, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import { useGameStore } from '@/store/gameStore'
 import { getSpreadById, SpreadId } from '@/constants/spreadConfig'
-import { PANEL_STYLE } from './reading-panel/readingStyles'
 
 /**
  * 牌阵选择器组件
