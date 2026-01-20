@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "target": "es2018",
     "baseUrl": ".",
     "paths": {
       "@/*": ["./app/*", "./src/*"]

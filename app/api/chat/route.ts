@@ -5,12 +5,24 @@ const API_URL = 'https://ai.kaiho.cc/v1/chat/completions'
 const MODEL = 'gemini-3-pro-preview'
 
 const SYSTEM_PROMPT = `
-你是一位知心塔罗师姐姐。会和用户进行一对一的多轮深度对话。
-每次回复不要太长，要给用户留出说话的空间。
-使用markdown格式输出，关键词句加粗。
-适当使用表情符号。
-不要使用列表格式。
-**和“”不能相邻，会导致解析失败。
+#角色
+你是一位掌握顶级心理学的塔罗师灵析，会根据塔罗牌与用户进行深度交流。
+#核心技能
+1.初步分析：通过塔罗牌对用户的问题进行初步简单分析，每张牌仅用一句话概括牌含义。
+2.详细判断：要解读准确需要向用户获取足够的信息，但一轮对话只能提问一次，以“是不是？”，“对吗？”结尾（让用户做“是或否”的选择题）。
+3.层层递进：一层一层结合用户信息解读塔罗牌。
+4.信任获取：对话通过冷读术和巴纳姆效应获取用户的认同感。
+5.最终解读：结合所有信息和塔罗牌，为用户提供总结和建议。
+6.补牌机制：当用户提出更多当前牌面无法解读的问题时，提示用户可以点击按钮补牌，提示需要补几张。
+#规则
+1.口语化，自然语言
+2.回复时不要提示“初步分析”“总结”“建议”等
+3.禁止列表回复
+4.使用markdown输出
+5.适当使用表情
+6.关键词加粗
+7.补完牌之后要告诉灵析喔
+8.**和“”不能相邻，会导致解析失败。
 `
 
 const formatCardsWithPositions = (
@@ -24,10 +36,25 @@ const formatCardsWithPositions = (
     .join('\n')
 }
 
+const formatChatHistory = (
+  messages: Array<{ role: string; content: string }>,
+  newContent?: string
+) => {
+  let history = ''
+  for (const msg of messages) {
+    const prefix = msg.role === 'user' ? '用户' : '塔罗师'
+    history += `${prefix}：${msg.content}\n`
+  }
+  if (newContent) {
+    history += `塔罗师：${newContent}`
+  }
+  return history.trim()
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json()
-    const { messages, content, cards, question, recordId } = body
+    const { messages, content, cards, question, recordId, extraCards } = body
 
     // 验证必要参数
     if (!messages || !Array.isArray(messages)) {
@@ -44,17 +71,27 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '服务未配置密钥' }, { status: 500 })
     }
 
-    // 构建系统提示词，包含卡牌信息
+// æå»ºç³»ç»æç¤ºè¯ï¼åå«å¡çä¿¡æ¯
     let systemContent = SYSTEM_PROMPT
-    if (cards && cards.length > 0) {
-      const cardsInfo = formatCardsWithPositions(cards)
-      systemContent = `${SYSTEM_PROMPT}
+    const systemSections = []
 
-当前抽到的牌：
-${cardsInfo}`
+    if (cards && cards.length > 0) {
+      systemSections.push(`当前抽到的牌：
+${formatCardsWithPositions(cards)}`)
     }
 
-    // 构建请求消息
+    if (extraCards && extraCards.length > 0) {
+      systemSections.push(`补牌：
+${formatCardsWithPositions(extraCards)}`)
+    }
+
+    if (systemSections.length > 0) {
+      systemContent = `${SYSTEM_PROMPT}
+
+${systemSections.join('\n\n')}`
+    }
+
+// 构建请求消息
     const filteredMessages = messages.filter(
       (m: { role: string; content: string }) =>
         m.role === 'user' || m.role === 'assistant'
@@ -142,7 +179,7 @@ ${cardsInfo}`
           isClosed = true
           try {
             controller.close()
-          } catch (e) {}
+          } catch (e) { }
         }
 
         try {
@@ -183,6 +220,19 @@ ${cardsInfo}`
           controller.error(e)
         } finally {
           close()
+          // 流结束后更新飞书解读字段（追加对话内容）
+          if (recordId) {
+            // 先把当前用户输入加入历史
+            const messagesWithCurrent = content
+              ? [...filteredMessages, { role: 'user', content }]
+              : filteredMessages
+            const fullHistory = formatChatHistory(messagesWithCurrent, fullContent)
+            console.log('[feishu] 更新解读, recordId:', recordId, 'content长度:', fullContent.length)
+            const fields = buildFields({ reading: fullHistory })
+            updateRecord(recordId, fields).catch((err) => {
+              console.error('[feishu][chat reading]', err)
+            })
+          }
         }
       },
     })

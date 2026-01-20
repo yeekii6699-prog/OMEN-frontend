@@ -6,11 +6,8 @@ import { Suspense, useEffect } from 'react'
 import { useGameStore } from '@/store/gameStore'
 import { CollapsibleChat } from '@/components/dom/CollapsibleChat'
 
-const LOCATION_STORAGE_KEY = 'omen_location_v1'
 const VISIT_RETRY_LIMIT = 3
 const VISIT_RETRY_BASE_DELAY = 1600
-const LOCATION_RETRY_LIMIT = 3
-const LOCATION_RETRY_BASE_DELAY = 2000
 
 const StarRing = dynamic(() => import('@/components/canvas/StarRing').then((mod) => mod.StarRing), {
   ssr: false,
@@ -37,20 +34,7 @@ export default function Page() {
 
   useEffect(() => {
     let visitRetries = 0
-    let locationRetries = 0
     let visitRetryTimer = null
-    let locationRetryTimer = null
-
-    const getStoredLocation = () => {
-      try {
-        const stored = localStorage.getItem(LOCATION_STORAGE_KEY)
-        if (!stored) return null
-        const location = JSON.parse(stored)
-        return { stored, location }
-      } catch (err) {
-        return null
-      }
-    }
 
     const getRecordId = () => {
       try {
@@ -76,59 +60,6 @@ export default function Page() {
       }, delay)
     }
 
-    const scheduleLocationRetry = () => {
-      if (locationRetryTimer || locationRetries >= LOCATION_RETRY_LIMIT) return
-      const delay = LOCATION_RETRY_BASE_DELAY * (locationRetries + 1)
-      locationRetries += 1
-      locationRetryTimer = setTimeout(() => {
-        locationRetryTimer = null
-        attemptLocationUpload()
-      }, delay)
-    }
-
-    const attemptLocationUpload = (recordIdOverride) => {
-      if (window.__omenLocationDenied) return
-      const recordId = recordIdOverride || getRecordId()
-      const storedLocation = getStoredLocation()
-      if (!recordId || !storedLocation) return
-      if (window.__omenLocationUploading) {
-        window.__omenLocationQueued = true
-        return
-      }
-      window.__omenLocationUploading = true
-
-      fetch('/api/feishu/location', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          recordId,
-          location: storedLocation.location,
-        }),
-      })
-        .then((res) => {
-          if (!res.ok) {
-            scheduleLocationRetry()
-            return
-          }
-          locationRetries = 0
-          try {
-            if (localStorage.getItem(LOCATION_STORAGE_KEY) === storedLocation.stored) {
-              localStorage.removeItem(LOCATION_STORAGE_KEY)
-            }
-          } catch (err) {}
-        })
-        .catch(() => {
-          scheduleLocationRetry()
-        })
-        .finally(() => {
-          window.__omenLocationUploading = false
-          if (window.__omenLocationQueued) {
-            window.__omenLocationQueued = false
-            attemptLocationUpload()
-          }
-        })
-    }
-
     const createVisitRecord = () => {
       if (window.__omenVisitInFlight) return
       window.__omenVisitInFlight = true
@@ -137,7 +68,6 @@ export default function Page() {
         .then((data) => {
           if (data?.recordId) {
             setRecordId(data.recordId)
-            attemptLocationUpload(data.recordId)
             visitRetries = 0
             return
           }
@@ -151,82 +81,18 @@ export default function Page() {
         })
     }
 
-    const storeLocation = (location) => {
-      try {
-        localStorage.setItem(LOCATION_STORAGE_KEY, JSON.stringify(location))
-      } catch (err) {}
-    }
-
-    const handleLocationSuccess = (position) => {
-      const location = {
-        lat: position.coords.latitude,
-        lng: position.coords.longitude,
-        accuracy: position.coords.accuracy,
-        timestamp: position.timestamp,
-      }
-      storeLocation(location)
-      attemptLocationUpload()
-    }
-
-    const requestLocation = (options, allowFallback) => {
-      if (typeof navigator === 'undefined' || !navigator.geolocation) return
-      if (window.__omenLocationDenied) return
-
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          handleLocationSuccess(position)
-        },
-        (err) => {
-          if (err?.code === 1) {
-            window.__omenLocationDenied = true
-            try {
-              localStorage.removeItem(LOCATION_STORAGE_KEY)
-            } catch (error) {}
-            return
-          }
-          if (allowFallback) {
-            requestLocation(
-              {
-                enableHighAccuracy: false,
-                timeout: 8000,
-                maximumAge: 600000,
-              },
-              false
-            )
-          }
-        },
-        options
-      )
-    }
-
     if (typeof window !== 'undefined') {
       if (!window.__omenVisitLogged) {
         window.__omenVisitLogged = true
         try {
           localStorage.removeItem('omen_visit_id')
-          localStorage.removeItem(LOCATION_STORAGE_KEY)
         } catch (err) {}
         createVisitRecord()
       }
     }
 
-    if (typeof window !== 'undefined') {
-      if (!window.__omenLocationRequested) {
-        window.__omenLocationRequested = true
-        requestLocation(
-          {
-            enableHighAccuracy: true,
-            timeout: 12000,
-            maximumAge: 300000,
-          },
-          true
-        )
-      }
-    }
-
     return () => {
       if (visitRetryTimer) clearTimeout(visitRetryTimer)
-      if (locationRetryTimer) clearTimeout(locationRetryTimer)
     }
   }, [])
 

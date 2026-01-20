@@ -69,6 +69,7 @@ const FIELD_LOCATION = '定位'
 const FIELD_QUESTION = '问题'
 const FIELD_READING = '解读'
 const FIELD_DEEP = '深入'
+const FIELD_CHAT_HISTORY = '对话记录'
 
 const getTenantToken = async () => {
   if (!APP_ID || !APP_SECRET) {
@@ -202,6 +203,7 @@ export const buildFields = (payload: {
   question?: string
   reading?: string
   deep?: string
+  chatHistory?: string
 }) => {
   const fields: Record<string, string | number> = {}
   if (payload.feedback) fields[FIELD_FEEDBACK] = payload.feedback
@@ -213,6 +215,7 @@ export const buildFields = (payload: {
   if (payload.question) fields[FIELD_QUESTION] = payload.question
   if (payload.reading) fields[FIELD_READING] = payload.reading
   if (payload.deep) fields[FIELD_DEEP] = payload.deep
+  if (payload.chatHistory) fields[FIELD_CHAT_HISTORY] = payload.chatHistory
   return fields
 }
 
